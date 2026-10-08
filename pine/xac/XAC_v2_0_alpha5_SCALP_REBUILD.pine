@@ -1,0 +1,440 @@
+//@version=6
+strategy(
+     "XAC v2.0-alpha5 — REBUILD SCALP",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = false,
+     calc_on_order_fills = false,
+     calc_on_every_tick = false,
+     initial_capital = 25000,
+     margin_long = 0,
+     margin_short = 0,
+     commission_type = strategy.commission.cash_per_contract,
+     commission_value = 0.50,
+     slippage = 1
+)
+
+// ============================================================================
+// XAC v2.0-alpha5 — CLEAN REBUILD / SCALP ONLY
+//
+// Frozen preserved source behavior:
+// - 75m local VP = exactly 15 completed 5m bars, INCLUDING signal bar.
+// - 80 bins default, VA70%.
+// - Equal allocation of each 5m bar volume across touched bins.
+// - Bearish-only VAH rejection scalp.
+// - Bars 0..13: require >=2 prior bearish VAH rejections.
+// - Bar 14: new bearish rejection, close < open.
+// - Entry: market order submitted at completed 5m close, expected fill next 1m open.
+// - Initial stop = signal 5m high + 1.00 point.
+// - Risk = $150, max 20 MNQ.
+// - Entry minute is ignored completely for trailing.
+// - Low-water initializes at ACTUAL entry price.
+// - From each minute AFTER entry:
+//     update favorable low-water
+//     next stop = min(initial stop, low-water + 0.50R)
+// - Newly tightened stop is effectively for subsequent bar.
+// - Max hold = 60m.
+// - 30m cooldown after accepted scalp exit.
+// ============================================================================
+
+string TZ = "Europe/Stockholm"
+float TICK = syminfo.mintick
+float MNQ_POINT_VALUE = 2.0
+
+string G0 = "00 — Rebuild"
+bool USE_SCALP = input.bool(true, "Scalp enabled", group = G0)
+bool SHOW_MARKS = input.bool(true, "Show explicit QA marks", group = G0)
+bool SHOW_LEVELS = input.bool(true, "Show VAH / active stop", group = G0)
+bool SHOW_DASH = input.bool(true, "Show mobile dashboard", group = G0)
+
+string G1 = "01 — Scalp frozen"
+int VP_BINS = input.int(80, "VP bins", minval = 20, maxval = 120, group = G1)
+float VA_PCT = input.float(0.70, "Value area", minval = 0.50, maxval = 0.90, step = 0.05, group = G1)
+float STOP_BUFFER = input.float(1.00, "Initial stop buffer pts", step = 0.25, group = G1)
+float TRAIL_R = input.float(0.50, "Trail distance R", step = 0.05, group = G1)
+int COOLDOWN_MIN = input.int(30, "Cooldown minutes", minval = 0, group = G1)
+float RISK_SCALP_USD = input.float(150.0, "Scalp risk USD", step = 10, group = G1)
+int MAX_MNQ = input.int(20, "Max MNQ", minval = 1, maxval = 20, group = G1)
+int FLAT_HOUR_STHLM = input.int(22, "Flat hour Stockholm", minval = 0, maxval = 23, group = G1)
+
+if barstate.isfirst
+    if not chart.is_standard
+        runtime.error("Use standard candles.")
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("Use MNQ 1-minute chart.")
+
+f_qty(float entryPx, float stopPx, float riskUsd) =>
+    float riskPts = math.abs(entryPx - stopPx)
+    float usdPerContract = riskPts * MNQ_POINT_VALUE
+    int q = usdPerContract > 0 ? int(math.floor(riskUsd / usdPerContract)) : 0
+    math.max(0, math.min(MAX_MNQ, q))
+
+f_pf() =>
+    float gl = math.abs(strategy.grossloss)
+    gl > 0 ? strategy.grossprofit / gl : na
+
+// ============================================================================
+// 5m aggregation and 15-bar local profile state
+// ============================================================================
+
+var array<float> vpo = array.new_float()
+var array<float> vph = array.new_float()
+var array<float> vpl = array.new_float()
+var array<float> vpc = array.new_float()
+var array<float> vpv = array.new_float()
+
+var float s5o = na
+var float s5h = na
+var float s5l = na
+var float s5c = na
+var float s5v = 0.0
+
+bool start5 = minute(time, TZ) % 5 == 0
+bool end5 = minute(time, TZ) % 5 == 4
+
+if start5 or na(s5o)
+    s5o := open
+    s5h := high
+    s5l := low
+    s5c := close
+    s5v := volume
+else
+    s5h := math.max(s5h, high)
+    s5l := math.min(s5l, low)
+    s5c := close
+    s5v += volume
+
+// ============================================================================
+// Counters / state
+// ============================================================================
+
+var int c5Closed = 0
+var int cProfileReady = 0
+var int cPrior2 = 0
+var int cNewReject = 0
+var int cCooldownPass = 0
+var int cSignals = 0
+var int cQtyZero = 0
+var int cOrders = 0
+var int cPosFills = 0
+var int cLedgerClosed = 0
+var int cInvisibleRT = 0
+var int cTrailUpdates = 0
+var int cTimeClose = 0
+
+var float lastVAH = na
+var float signalStop = na
+var float initStop = na
+var float riskPts = na
+var float lowWater = na
+var float activeTrailStop = na
+var int entryBar = na
+var int cooldownUntil = na
+
+var int prevClosedTrades = 0
+
+// QA event flags.
+bool qaSignal = false
+bool qaOrder = false
+
+// ============================================================================
+// Closed-trade ledger first: set cooldown from real exit timestamp.
+// ============================================================================
+
+int closedDeltaPre = strategy.closedtrades - prevClosedTrades
+
+if closedDeltaPre > 0
+    for n = prevClosedTrades to strategy.closedtrades - 1
+        if strategy.closedtrades.entry_id(n) == "SCALP-S"
+            cooldownUntil := strategy.closedtrades.exit_time(n) + COOLDOWN_MIN * 60 * 1000
+            cLedgerClosed += 1
+
+prevClosedTrades := strategy.closedtrades
+
+// ============================================================================
+// Complete each 5m bar, then compute local VP including that bar.
+// ============================================================================
+
+if end5
+    c5Closed += 1
+
+    array.push(vpo, s5o)
+    array.push(vph, s5h)
+    array.push(vpl, s5l)
+    array.push(vpc, s5c)
+    array.push(vpv, s5v)
+
+    if array.size(vpo) > 15
+        array.shift(vpo)
+        array.shift(vph)
+        array.shift(vpl)
+        array.shift(vpc)
+        array.shift(vpv)
+
+    if array.size(vpo) == 15
+        cProfileReady += 1
+
+        float lo75 = array.min(vpl)
+        float hi75 = array.max(vph)
+        float span = hi75 - lo75
+
+        if span > 0
+            float bw = span / VP_BINS
+            array<float> hist = array.new_float(VP_BINS, 0.0)
+
+            for k = 0 to 14
+                float bh = array.get(vph, k)
+                float bl = array.get(vpl, k)
+                float bv = array.get(vpv, k)
+
+                int i0 = int(math.max(0, math.min(VP_BINS - 1, math.floor((bl - lo75) / bw))))
+                int i1 = int(math.max(0, math.min(VP_BINS - 1, math.floor((bh - lo75) / bw))))
+                int cnt = math.max(1, i1 - i0 + 1)
+
+                for z = i0 to i1
+                    array.set(hist, z, array.get(hist, z) + bv / cnt)
+
+            float total = array.sum(hist)
+            int pocIdx = array.indexof(hist, array.max(hist))
+            int vaLo = pocIdx
+            int vaHi = pocIdx
+            float acc = array.get(hist, pocIdx)
+
+            while acc < total * VA_PCT and (vaLo > 0 or vaHi < VP_BINS - 1)
+                float lv = vaLo > 0 ? array.get(hist, vaLo - 1) : -1.0
+                float rv = vaHi < VP_BINS - 1 ? array.get(hist, vaHi + 1) : -1.0
+
+                if rv > lv
+                    vaHi += 1
+                    acc += rv
+                else
+                    vaLo -= 1
+                    acc += lv
+
+            float vah = lo75 + (vaHi + 1) * bw
+            lastVAH := vah
+
+            int priorRej = 0
+            for k = 0 to 13
+                if array.get(vph, k) >= vah and array.get(vpc, k) < vah
+                    priorRej += 1
+
+            bool priorOK = priorRej >= 2
+            if priorOK
+                cPrior2 += 1
+
+            bool newRej = priorOK and array.get(vph, 14) >= vah and array.get(vpc, 14) < vah and array.get(vpc, 14) < array.get(vpo, 14)
+            if newRej
+                cNewReject += 1
+
+            bool cooldownOK = na(cooldownUntil) or time_close >= cooldownUntil
+            if newRej and cooldownOK
+                cCooldownPass += 1
+
+            if USE_SCALP and newRej and cooldownOK and strategy.position_size == 0
+                cSignals += 1
+                qaSignal := true
+
+                float sl = array.get(vph, 14) + STOP_BUFFER
+                int qty = f_qty(close, sl, RISK_SCALP_USD)
+
+                if qty > 0
+                    signalStop := sl
+                    strategy.entry("SCALP-S", strategy.short, qty = qty, comment = "XAC-SCALP")
+                    cOrders += 1
+                    qaOrder := true
+                else
+                    cQtyZero += 1
+
+// ============================================================================
+// Fill and trailing execution
+// ============================================================================
+
+bool justOpened = strategy.position_size < 0 and strategy.position_size[1] >= 0
+bool justClosedByPos = strategy.position_size == 0 and strategy.position_size[1] < 0
+
+if justOpened and not na(signalStop)
+    cPosFills += 1
+    initStop := signalStop
+    riskPts := initStop - strategy.position_avg_price
+    lowWater := strategy.position_avg_price
+    activeTrailStop := initStop
+    entryBar := bar_index
+
+    if riskPts > TICK
+        strategy.exit("SCALP-X", "SCALP-S", stop = initStop)
+
+if strategy.position_size < 0 and not na(entryBar) and bar_index > entryBar
+    lowWater := math.min(lowWater, low)
+    float nextStop = math.min(initStop, lowWater + TRAIL_R * riskPts)
+
+    if na(activeTrailStop) or nextStop < activeTrailStop
+        cTrailUpdates += 1
+
+    activeTrailStop := nextStop
+    strategy.exit("SCALP-X", "SCALP-S", stop = activeTrailStop)
+
+    if bar_index - entryBar >= 60
+        strategy.close("SCALP-S", comment = "SCALP 60m max", immediately = true)
+        cTimeClose += 1
+
+if justClosedByPos
+    entryBar := na
+    initStop := na
+    riskPts := na
+    lowWater := na
+    activeTrailStop := na
+    signalStop := na
+
+// Detect any same-bar round trip not visible in position transitions.
+int closedDeltaPost = strategy.closedtrades - prevClosedTrades
+bool closedByLedgerNow = closedDeltaPost > 0
+
+if closedByLedgerNow
+    for n = prevClosedTrades to strategy.closedtrades - 1
+        if strategy.closedtrades.entry_id(n) == "SCALP-S"
+            cLedgerClosed += 1
+            cooldownUntil := strategy.closedtrades.exit_time(n) + COOLDOWN_MIN * 60 * 1000
+
+            if not justOpened and strategy.position_size == 0 and strategy.position_size[1] == 0
+                cInvisibleRT += 1
+
+    prevClosedTrades := strategy.closedtrades
+
+if hour(time, TZ) == FLAT_HOUR_STHLM and minute(time, TZ) == 0
+    strategy.close_all(comment = "XAC FLAT")
+
+// ============================================================================
+// Explicit mobile marks
+// ============================================================================
+
+plotshape(
+     SHOW_MARKS and qaSignal,
+     title = "SCALP SIGNAL",
+     style = shape.triangledown,
+     location = location.abovebar,
+     text = "SC?",
+     textcolor = color.white,
+     color = color.new(color.red, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrder,
+     title = "SCALP ORDER",
+     style = shape.circle,
+     location = location.abovebar,
+     text = "O",
+     textcolor = color.white,
+     color = color.red,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and justOpened,
+     title = "SCALP FILL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     text = "SC S",
+     textcolor = color.white,
+     color = color.red,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and closedByLedgerNow,
+     title = "SCALP EXIT",
+     style = shape.xcross,
+     location = location.abovebar,
+     text = "X",
+     color = color.black,
+     size = size.small
+)
+
+plot(SHOW_LEVELS ? lastVAH : na, "75m VAH", color = color.new(color.orange, 25), style = plot.style_stepline)
+plot(SHOW_LEVELS and strategy.position_size < 0 ? activeTrailStop : na, "Active stop", color = color.new(color.red, 15), style = plot.style_linebr)
+
+// ============================================================================
+// Mobile dashboard
+// ============================================================================
+
+var table dash = table.new(position.top_right, 4, 14, border_width = 1)
+
+if SHOW_DASH and barstate.islast
+    color hdr = color.rgb(35, 35, 35)
+    color bg1 = color.rgb(245, 245, 245)
+    color bg2 = color.rgb(230, 230, 230)
+    color txt = color.black
+    color inv = color.white
+
+    table.clear(dash, 0, 0, 3, 13)
+
+    table.cell(dash, 0, 0, "XAC v2 α5", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 0, "SCALP", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 0, "Closed", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 0, str.tostring(strategy.closedtrades), text_color = inv, bgcolor = hdr)
+
+    table.cell(dash, 0, 1, "PF", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 1, str.tostring(f_pf(), "#.###"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 1, "Pos", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 1, str.tostring(strategy.position_size), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 2, "5m closed", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 2, str.tostring(c5Closed), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 2, "Profiles", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 2, str.tostring(cProfileReady), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 3, "Prior>=2", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 3, str.tostring(cPrior2), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 3, "New reject", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 3, str.tostring(cNewReject), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 4, "Cooldown pass", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 4, str.tostring(cCooldownPass), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 4, "Signals", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 4, str.tostring(cSignals), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 5, "Orders", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 5, str.tostring(cOrders), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 5, "Pos fills", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 5, str.tostring(cPosFills), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 6, "Ledger closed", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 6, str.tostring(cLedgerClosed), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 6, "Invisible RT", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 6, str.tostring(cInvisibleRT), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 7, "Qty0", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 7, str.tostring(cQtyZero), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 7, "Trail updates", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 7, str.tostring(cTrailUpdates), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 8, "VAH", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 8, str.tostring(lastVAH, "#.##"), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 8, "Active stop", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 8, str.tostring(activeTrailStop, "#.##"), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 9, "Init stop", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 9, str.tostring(initStop, "#.##"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 9, "Risk pts", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 9, str.tostring(riskPts, "#.##"), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 10, "Cooldown", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 10, str.tostring(COOLDOWN_MIN), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 10, "Time exits", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 10, str.tostring(cTimeClose), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 11, "Risk", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 11, "$"+str.tostring(RISK_SCALP_USD, "#"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 11, "Trail R", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 11, str.tostring(TRAIL_R, "#.##"), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 12, "Entry bar", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 12, str.tostring(entryBar), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 12, "Max hold", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 12, "60m", text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 13, "STATUS", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 13, "REBUILD", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 13, "Stage", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 13, "SCALP ONLY", text_color = inv, bgcolor = hdr)
