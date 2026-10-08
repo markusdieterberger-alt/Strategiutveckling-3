@@ -26,3 +26,22 @@ Awaiting mobile compile/dashboard/execution-mark QA.
 ## Next
 After IB smoke-test:
 IBT isolated rebuild → POC isolated rebuild → Scalp isolated rebuild → combined router.
+
+
+## IB — alpha2 mobile smoke-test
+Observed chart-history QA:
+- Days: 20
+- IB built: 19
+- Raw false-break H/L: 66/76
+- First H/L: 15/16
+- Volume passes: 6
+- Orders: 5
+- Fills: 5
+- Closed: 5
+- PF on visible chart-history: 4.149
+
+Status: execution smoke-test PASS. One diagnostic discrepancy remains: Vol pass 6 vs Orders 5. This is not treated as parity failure yet; alpha2 did not separately expose qty=0 / position-block cause. Do not infer canonical parity from PF.
+
+## IBT — alpha3
+Isolated rebuild added with explicit candidate-before-volume semantics and counters for qty-zero / blocked-position.
+Awaiting mobile QA.
