@@ -1,0 +1,9 @@
+[project]
+name = "pine-shadow-runtime"
+version = "1.0.0"
+description = "Contract-focused TradingView Pine strategy shadow runtime for Strategiutveckling/ZAC"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
