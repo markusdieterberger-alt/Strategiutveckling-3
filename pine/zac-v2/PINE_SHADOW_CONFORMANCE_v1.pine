@@ -1,0 +1,65 @@
+//@version=6
+strategy(
+     "PINE SHADOW CONFORMANCE v1",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = false,
+     calc_on_order_fills = false,
+     calc_on_every_tick = false,
+     margin_long = 0,
+     margin_short = 0,
+     commission_type = strategy.commission.cash_per_contract,
+     commission_value = 0.50,
+     slippage = 1
+)
+
+// Calibration harness for PINE_SHADOW_RUNTIME_v1.
+// Use standard MNQ1! 1m bars.
+// It intentionally creates deterministic order cases from bar_index.
+// Desktop Pine Logs are the preferred export path.
+
+int phase = bar_index % 240
+
+if phase == 10 and strategy.position_size == 0
+    strategy.entry("MKT-L", strategy.long, qty = 1)
+
+if phase == 20 and strategy.position_size > 0
+    strategy.close("MKT-L", comment = "NORMAL CLOSE")
+
+if phase == 40 and strategy.position_size == 0
+    float lim = close - 4.0
+    strategy.entry("LIM-L", strategy.long, qty = 1, limit = lim)
+    strategy.exit("LIM-L-X", "LIM-L", stop = lim - 4.0, limit = lim + 8.0)
+
+if phase == 100 and strategy.position_size == 0
+    float lim = close + 4.0
+    strategy.entry("LIM-S", strategy.short, qty = 1, limit = lim)
+    strategy.exit("LIM-S-X", "LIM-S", stop = lim + 4.0, limit = lim - 8.0)
+
+if phase == 170 and strategy.position_size != 0
+    strategy.close_all(comment = "IMMEDIATE", immediately = true)
+
+var int prevClosed = 0
+
+if strategy.closedtrades > prevClosed
+    for i = prevClosed to strategy.closedtrades - 1
+        log.info(
+             "CASE|{0}|{1}|{2}|{3}|{4}|{5}|{6}",
+             str.tostring(time),
+             str.tostring(bar_index),
+             strategy.closedtrades.entry_id(i),
+             str.tostring(strategy.closedtrades.entry_price(i)),
+             str.tostring(strategy.closedtrades.exit_price(i)),
+             str.tostring(strategy.closedtrades),
+             str.tostring(strategy.position_size)
+        )
+    prevClosed := strategy.closedtrades
+
+if barstate.islast
+    log.info(
+         "TIMEKEYS|{0}|{1}|{2}|{3}",
+         str.tostring(time),
+         str.tostring(time("5")),
+         str.tostring(time("60")),
+         str.tostring(time("240"))
+    )
