@@ -1,0 +1,23 @@
+name: Shadow Runtime Tests
+
+on:
+  push:
+    branches: [zac-v2-rebuild]
+    paths:
+      - "tools/pine_shadow_runtime_v1/**"
+      - ".github/workflows/shadow-runtime-tests.yml"
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/pine_shadow_runtime_v1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run Shadow Runtime tests
+        run: python -m pytest -q
