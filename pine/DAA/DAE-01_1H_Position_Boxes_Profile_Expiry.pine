@@ -1,0 +1,387 @@
+//@version=6
+indicator("DAE-01 | 1H FVG + CRT + 1H Position Boxes + CRT Expiry", overlay=true, max_boxes_count=500, max_labels_count=500, max_lines_count=20)
+
+// DAE-01: DAC-02 retained, plus a dynamic 5m volume profile for the latest CRT+FVG.
+// Mitigation: the first price touch of the nearest zone boundary.
+// Only confirmed hourly candles may create a zone.
+// The 1000-bar lookback refers to completed 1H bars.
+
+lookbackHours = input.int(1000, "Lookback (completed 1H bars)", minval=3, maxval=5000)
+maxZones = input.int(400, "Maximum visible zones", minval=1, maxval=490)
+bullFill = input.color(color.new(color.teal, 82), "Bullish FVG")
+bearFill = input.color(color.new(color.red, 82), "Bearish FVG")
+
+var array<box> zoneBoxes = array.new<box>()
+var array<float> zoneTop = array.new<float>()
+var array<float> zoneBottom = array.new<float>()
+var array<int> zoneBorn = array.new<int>()
+var array<bool> zoneBull = array.new<bool>()
+
+// Confirmed hourly 3-candle FVG: newest confirmed bar [1], oldest [3].
+// lookahead_on with [1]/[3] is the standard non-repainting HTF pattern.
+hourTime = request.security(syminfo.tickerid, "60", time, lookahead=barmerge.lookahead_on)
+hourTop = request.security(syminfo.tickerid, "60", high[1], lookahead=barmerge.lookahead_on)
+hourBottom = request.security(syminfo.tickerid, "60", low[1], lookahead=barmerge.lookahead_on)
+hourOldHigh = request.security(syminfo.tickerid, "60", high[3], lookahead=barmerge.lookahead_on)
+hourOldLow = request.security(syminfo.tickerid, "60", low[3], lookahead=barmerge.lookahead_on)
+hourBorn = request.security(syminfo.tickerid, "60", time[1], lookahead=barmerge.lookahead_on)
+
+// At chart resolutions above 1H, request.security() samples only one 1H
+// bar per chart bar. This version requires chart TF <= 1H for reliable
+// detection, but drawings persist when switching to higher chart TFs.
+chartSeconds = timeframe.in_seconds()
+canDetect = not na(chartSeconds) and chartSeconds <= 3600
+newHour = ta.change(hourTime) != 0
+
+if canDetect and newHour and not na(hourOldHigh) and not na(hourOldLow)
+    bullGap = hourBottom > hourOldHigh
+    bearGap = hourTop < hourOldLow
+    if bullGap or bearGap
+        zTop = bullGap ? hourBottom : hourOldLow
+        zBot = bullGap ? hourOldHigh : hourTop
+        b = box.new(left=hourBorn, top=zTop, right=time, bottom=zBot,
+            xloc=xloc.bar_time, extend=extend.right,
+            bgcolor=bullGap ? bullFill : bearFill,
+            border_color=bullGap ? color.new(color.teal, 25) : color.new(color.red, 25))
+        array.push(zoneBoxes, b)
+        array.push(zoneTop, zTop)
+        array.push(zoneBottom, zBot)
+        array.push(zoneBorn, hourBorn)
+        array.push(zoneBull, bullGap)
+
+// Touch mitigation and expiry. A bullish FVG is touched when price
+// falls to its top; a bearish FVG when price rises to its bottom.
+if array.size(zoneBoxes) > 0
+    for i = array.size(zoneBoxes) - 1 to 0
+        b = array.get(zoneBoxes, i)
+        top = array.get(zoneTop, i)
+        bot = array.get(zoneBottom, i)
+        born = array.get(zoneBorn, i)
+        isBull = array.get(zoneBull, i)
+        // Never mitigate on the hour the FVG is first confirmed.
+        touched = time > born and (isBull ? low <= top : high >= bot)
+        expired = time - born > lookbackHours * 3600000
+        if touched or expired
+            box.delete(b)
+            array.remove(zoneBoxes, i)
+            array.remove(zoneTop, i)
+            array.remove(zoneBottom, i)
+            array.remove(zoneBorn, i)
+            array.remove(zoneBull, i)
+
+// Keep under the TradingView box-object limit.
+while array.size(zoneBoxes) > maxZones
+    box.delete(array.shift(zoneBoxes))
+    array.shift(zoneTop)
+    array.shift(zoneBottom)
+    array.shift(zoneBorn)
+    array.shift(zoneBull)
+
+// =====================================================================
+// DAB-01 — 1H CRT (sweep + close inside preceding candle's full range)
+// Bullish: low[1] < low[2] and close[1] is inside [low[2], high[2]].
+// Bearish: high[1] > high[2] and close[1] is inside [low[2], high[2]].
+// No requirement for bullish/bearish candle body.
+// Strict sweep; equality at previous extreme does not count.
+// Both signals may occur on an outside candle sweeping both extremes.
+// =====================================================================
+showCRT = input.bool(true, "Show 1H CRT arrows")
+maxCRTLabels = input.int(400, "Maximum CRT arrows", minval=1, maxval=490)
+crtColor = input.color(color.purple, "CRT arrow color")
+var array<label> crtLabels = array.new<label>()
+
+crtPrevHigh = request.security(syminfo.tickerid, "60", high[2], lookahead=barmerge.lookahead_on)
+crtPrevLow = request.security(syminfo.tickerid, "60", low[2], lookahead=barmerge.lookahead_on)
+crtConfirmedClose = request.security(syminfo.tickerid, "60", close[1], lookahead=barmerge.lookahead_on)
+crtConfirmedHigh = request.security(syminfo.tickerid, "60", high[1], lookahead=barmerge.lookahead_on)
+crtConfirmedLow = request.security(syminfo.tickerid, "60", low[1], lookahead=barmerge.lookahead_on)
+
+crtCloseInside = crtConfirmedClose >= crtPrevLow and crtConfirmedClose <= crtPrevHigh
+crtBull = crtConfirmedLow < crtPrevLow and crtCloseInside
+crtBear = crtConfirmedHigh > crtPrevHigh and crtCloseInside
+
+// Adjacency: CRT candle is also the third candle completing a new 1H FVG.
+// FVG direction is independent of CRT direction, as in the supplied example.
+crtAdjacentFVG = (hourBottom > hourOldHigh) or (hourTop < hourOldLow)
+
+if showCRT and canDetect and newHour and crtAdjacentFVG and not na(crtPrevLow) and not na(crtPrevHigh)
+    if crtBull
+        arrow = label.new(x=hourBorn, y=crtConfirmedLow, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowup, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+    if crtBear
+        arrow = label.new(x=hourBorn, y=crtConfirmedHigh, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowdown, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+
+while array.size(crtLabels) > maxCRTLabels
+    label.delete(array.shift(crtLabels))
+
+
+// =====================================================================
+// DAD-01 — Latest CRT+FVG: dynamic 5m volume profile
+// Calculation supported on 5-minute chart only.
+// 1m intrabar volume is allocated by price overlap.
+// This is an OHLCV approximation, NOT TradingView's native tick profile.
+// =====================================================================
+vpBins = input.int(60, "DAD VP rows", minval=10, maxval=80)
+vpValueArea = input.float(0.70, "DAD value area", minval=0.50, maxval=0.95, step=0.05)
+vpMaxCandles = input.int(4000, "DAD max 1m candles", minval=100, maxval=8000)
+vpWidthMinutes = input.int(45, "DAD histogram maximum width (minutes)", minval=5, maxval=240)
+vpHistogramColor = input.color(color.new(color.gray, 85), "DAD histogram (gray)")
+vpVAColor = input.color(color.new(color.silver, 78), "DAD value area histogram (gray)")
+vpPOCColor = input.color(color.black, "DAD POC")
+vpVAHColor = input.color(color.black, "DAD VAH")
+vpVALColor = input.color(color.black, "DAD VAL")
+
+// DAE-01 runs on a 5m chart, consuming all available 1m intrabars.
+// Only confirmed 5m bars are ingested to avoid realtime double counting.
+vpCanRun = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 60)
+[ltfT, ltfH, ltfL, ltfV] = request.security_lower_tf(syminfo.tickerid, "1", [time, high, low, volume])
+
+var array<int> cacheT = array.new_int()
+var array<float> cacheH = array.new_float()
+var array<float> cacheL = array.new_float()
+var array<float> cacheV = array.new_float()
+var array<int> profileT = array.new_int()
+var array<float> profileH = array.new_float()
+var array<float> profileL = array.new_float()
+var array<float> profileV = array.new_float()
+var bool vpActive = false
+var bool vpIsBullFVG = false
+var int vpTradeDirection = 0
+var float vpGapTop = na
+var float vpGapBottom = na
+var int vpBorn = na
+var int vpActivationTime = na
+var float vpCreatorHigh = na
+var float vpCreatorLow = na
+
+// Detect the completed 1H CRT/FVG on the first bar of the next hour.
+vpNewSignal = vpCanRun and newHour and crtAdjacentFVG and (crtBull or crtBear) and not na(hourBorn)
+if vpNewSignal
+    array.clear(profileT)
+    array.clear(profileH)
+    array.clear(profileL)
+    array.clear(profileV)
+    vpActive := true
+    vpBorn := hourBorn
+    vpCreatorHigh := hourTop
+    vpCreatorLow := hourBottom
+    vpActivationTime := time
+    vpTradeDirection := crtBull and not crtBear ? 1 : crtBear and not crtBull ? -1 : 0
+    vpIsBullFVG := hourBottom > hourOldHigh
+    vpGapTop := vpIsBullFVG ? hourBottom : hourOldLow
+    vpGapBottom := vpIsBullFVG ? hourOldHigh : hourTop
+    if array.size(cacheT) > 0
+        for j = 0 to array.size(cacheT) - 1
+            t = array.get(cacheT, j)
+            if t >= vpBorn
+                array.push(profileT, t)
+                array.push(profileH, array.get(cacheH, j))
+                array.push(profileL, array.get(cacheL, j))
+                array.push(profileV, array.get(cacheV, j))
+
+// Each completed 5m candle contributes its available 1m intrabars.
+if vpCanRun and barstate.isconfirmed
+    intrabars = array.size(ltfT)
+    if intrabars > 0
+        for j = 0 to intrabars - 1
+            t = array.get(ltfT, j)
+            h = array.get(ltfH, j)
+            l = array.get(ltfL, j)
+            v = nz(array.get(ltfV, j))
+            array.push(cacheT, t)
+            array.push(cacheH, h)
+            array.push(cacheL, l)
+            array.push(cacheV, v)
+            if array.size(cacheT) > 120
+                array.shift(cacheT)
+                array.shift(cacheH)
+                array.shift(cacheL)
+                array.shift(cacheV)
+            if vpActive and t >= vpBorn
+                array.push(profileT, t)
+                array.push(profileH, h)
+                array.push(profileL, l)
+                array.push(profileV, v)
+
+// Match the FVG's touch-mitigation definition from DAC-02.
+if vpActive and time > vpActivationTime
+    if vpIsBullFVG ? low <= vpGapTop : high >= vpGapBottom
+        vpActive := false
+
+// Expire untouched profile when a completed 1H candle closes beyond
+// the high/low of the 1H candle that created the FVG.
+if vpActive and newHour and time > vpActivationTime
+    if vpIsBullFVG ? crtConfirmedClose > vpCreatorHigh : crtConfirmedClose < vpCreatorLow
+        vpActive := false
+
+// A bounded working range prevents excessive Pine execution costs.
+// The range starts at the FVG's formation and grows until mitigation;
+// if this cap is reached, the oldest 5m candles are discarded.
+if array.size(profileT) > vpMaxCandles
+    array.shift(profileT)
+    array.shift(profileH)
+    array.shift(profileL)
+    array.shift(profileV)
+
+// DAE-01 — three independently switchable entry levels.
+useVAClose = input.bool(true, "Entry: VA Close (long VAH / short VAL)", group="DAE-01 Position")
+useVAFar = input.bool(false, "Entry: VA Far (long VAL / short VAH)", group="DAE-01 Position")
+usePOCEntry = input.bool(false, "Entry: POC", group="DAE-01 Position")
+positionWidth = input.int(18, "Position box width (5m bars)", minval=2, maxval=100, group="DAE-01 Position")
+var array<box> positionBoxes = array.new<box>()
+var array<line> positionLines = array.new<line>()
+var array<label> positionLabels = array.new<label>()
+var array<int> positionExpiry = array.new<int>()
+var int lastPositionBorn = na
+
+// Return the nearest FVG boundary that lies in the profitable direction.
+f_nearestTarget(float entry, float edgeA, float edgeB, int dir) =>
+    float result = na
+    bool validA = dir == 1 ? edgeA > entry : edgeA < entry
+    bool validB = dir == 1 ? edgeB > entry : edgeB < entry
+    if validA and validB
+        result := math.abs(edgeA - entry) <= math.abs(edgeB - entry) ? edgeA : edgeB
+    else if validA
+        result := edgeA
+    else if validB
+        result := edgeB
+    result
+
+f_position(float entry, float target, int dir, string caption, int leftT, int rightT) =>
+    if not na(target) and target != entry and dir != 0
+        float risk = math.abs(target - entry)
+        float stop = entry - dir * risk
+        box rewardBox = box.new(leftT, math.max(entry, target), rightT, math.min(entry, target), xloc=xloc.bar_time, bgcolor=color.new(color.green, 78), border_color=color.new(color.green, 35))
+        box riskBox = box.new(leftT, math.max(entry, stop), rightT, math.min(entry, stop), xloc=xloc.bar_time, bgcolor=color.new(color.red, 78), border_color=color.new(color.red, 35))
+        array.push(positionBoxes, rewardBox)
+        array.push(positionBoxes, riskBox)
+        array.push(positionLines, line.new(leftT, entry, rightT, entry, xloc=xloc.bar_time, color=color.white, width=2))
+        array.push(positionExpiry, leftT + 1000 * 3600000)
+        array.push(positionLabels, label.new(rightT, entry, caption + "  E " + str.tostring(entry, format.mintick) + "  TP " + str.tostring(target, format.mintick) + "  SL " + str.tostring(stop, format.mintick) + "  RR 1:1", xloc=xloc.bar_time, style=label.style_label_left, color=color.new(color.black, 40), textcolor=color.white, size=size.tiny))
+
+var array<box> vpDrawBoxes = array.new<box>()
+var line vpPocLine = na
+var line vpVahLine = na
+var line vpValLine = na
+
+// Draw only on the latest chart bar; history is processed into arrays,
+// then one up-to-date profile is rendered.
+if barstate.islast
+    // Keep completed position drawings for 1000 hourly bars.
+    if array.size(positionExpiry) > 0
+        for i = array.size(positionExpiry) - 1 to 0
+            if time >= array.get(positionExpiry, i)
+                // Two boxes, one line and one label per position.
+                box.delete(array.get(positionBoxes, i * 2 + 1))
+                box.delete(array.get(positionBoxes, i * 2))
+                array.remove(positionBoxes, i * 2 + 1)
+                array.remove(positionBoxes, i * 2)
+                line.delete(array.remove(positionLines, i))
+                label.delete(array.remove(positionLabels, i))
+                array.remove(positionExpiry, i)
+    if array.size(vpDrawBoxes) > 0
+        for j = array.size(vpDrawBoxes) - 1 to 0
+            box.delete(array.get(vpDrawBoxes, j))
+        array.clear(vpDrawBoxes)
+    if not na(vpPocLine)
+        line.delete(vpPocLine)
+        vpPocLine := na
+    if not na(vpVahLine)
+        line.delete(vpVahLine)
+        vpVahLine := na
+    if not na(vpValLine)
+        line.delete(vpValLine)
+        vpValLine := na
+
+    n = array.size(profileT)
+    if vpActive and vpCanRun and n > 0
+        rangeHi = array.max(profileH)
+        rangeLo = array.min(profileL)
+        span = rangeHi - rangeLo
+        if span > 0
+            step = span / vpBins
+            hist = array.new_float(vpBins, 0.0)
+            for j = 0 to n - 1
+                hh = array.get(profileH, j)
+                ll = array.get(profileL, j)
+                vv = array.get(profileV, j)
+                b0 = int(math.max(0, math.min(vpBins - 1, math.floor((ll - rangeLo) / step))))
+                b1 = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                // Distribute volume proportionally to candle/bin price overlap.
+                candleRange = hh - ll
+                if candleRange > 0
+                    for k = b0 to b1
+                        binLow = rangeLo + k * step
+                        binHigh = binLow + step
+                        overlap = math.max(0.0, math.min(hh, binHigh) - math.max(ll, binLow))
+                        if overlap > 0
+                            array.set(hist, k, array.get(hist, k) + vv * overlap / candleRange)
+                else
+                    midBin = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                    array.set(hist, midBin, array.get(hist, midBin) + vv)
+
+            maxV = array.max(hist)
+            totalV = array.sum(hist)
+            pocIndex = array.indexof(hist, maxV)
+            vaLeft = pocIndex
+            vaRight = pocIndex
+            vaVolume = array.get(hist, pocIndex)
+            for j = 0 to vpBins - 1
+                if vaVolume >= totalV * vpValueArea
+                    break
+                leftVol = vaLeft > 0 ? array.get(hist, vaLeft - 1) : -1.0
+                rightVol = vaRight < vpBins - 1 ? array.get(hist, vaRight + 1) : -1.0
+                if rightVol > leftVol and vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+                else if vaLeft > 0
+                    vaLeft -= 1
+                    vaVolume += array.get(hist, vaLeft)
+                else if vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+
+            pocPrice = rangeLo + (pocIndex + 0.5) * step
+            vahPrice = rangeLo + (vaRight + 1) * step
+            valPrice = rangeLo + vaLeft * step
+            baseTime = time
+            maxWidthMs = vpWidthMinutes * 60000
+            for k = 0 to vpBins - 1
+                vol = array.get(hist, k)
+                if vol > 0 and maxV > 0
+                    rightTime = baseTime + int(math.max(60000, maxWidthMs * vol / maxV))
+                    boxColor = k >= vaLeft and k <= vaRight ? vpVAColor : vpHistogramColor
+                    b = box.new(left=baseTime, top=rangeLo + (k + 1) * step,
+                        right=rightTime, bottom=rangeLo + k * step,
+                        xloc=xloc.bar_time, bgcolor=boxColor,
+                        border_color=color.new(boxColor, 100))
+                    array.push(vpDrawBoxes, b)
+
+            vpPocLine := line.new(vpBorn, pocPrice, time, pocPrice,
+                 xloc=xloc.bar_time, color=vpPOCColor, width=2)
+            vpVahLine := line.new(vpBorn, vahPrice, time, vahPrice,
+                 xloc=xloc.bar_time, color=vpVAHColor, style=line.style_dashed)
+            vpValLine := line.new(vpBorn, valPrice, time, valPrice,
+                 xloc=xloc.bar_time, color=vpVALColor, style=line.style_dashed)
+
+            // Position levels use the same current profile VA/POC values.
+            // The setup direction comes from the associated confirmed CRT.
+            if vpTradeDirection != 0 and (na(lastPositionBorn) or lastPositionBorn != vpBorn)
+                lastPositionBorn := vpBorn
+                rightT = time + positionWidth * 3600000
+                if useVAClose
+                    entryClose = vpTradeDirection == 1 ? vahPrice : valPrice
+                    targetClose = f_nearestTarget(entryClose, vpGapTop, vpGapBottom, vpTradeDirection)
+                    f_position(entryClose, targetClose, vpTradeDirection, "VA Close", time, rightT)
+                if useVAFar
+                    entryFar = vpTradeDirection == 1 ? valPrice : vahPrice
+                    targetFar = f_nearestTarget(entryFar, vpGapTop, vpGapBottom, vpTradeDirection)
+                    f_position(entryFar, targetFar, vpTradeDirection, "VA Far", time, rightT)
+                if usePOCEntry
+                    targetPOC = f_nearestTarget(pocPrice, vpGapTop, vpGapBottom, vpTradeDirection)
+                    f_position(pocPrice, targetPOC, vpTradeDirection, "POC", time, rightT)
