@@ -1,0 +1,608 @@
+//@version=6
+strategy("DAE-21 | DAE-20 Dashboard Parity", overlay=true, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_boxes_count=500, max_labels_count=500, max_lines_count=300)
+
+// DAE-20: DAC-02 retained, plus a dynamic 5m volume profile for the latest CRT+FVG.
+// Mitigation: the first price touch of the nearest zone boundary.
+// Only confirmed 30m candles may create a zone.
+// The 1000-bar lookback refers to completed 30m bars.
+
+lookbackHours = input.int(1000, "Lookback (completed 30m bars)", minval=3, maxval=5000)
+maxZones = input.int(400, "Maximum visible zones", minval=1, maxval=490)
+bullFill = input.color(color.new(color.teal, 82), "Bullish FVG")
+bearFill = input.color(color.new(color.red, 82), "Bearish FVG")
+
+var array<box> zoneBoxes = array.new<box>()
+var array<float> zoneTop = array.new<float>()
+var array<float> zoneBottom = array.new<float>()
+var array<int> zoneBorn = array.new<int>()
+var array<bool> zoneBull = array.new<bool>()
+
+// Confirmed 30m 3-candle FVG: newest confirmed bar [1], oldest [3].
+// lookahead_on with [1]/[3] is the standard non-repainting HTF pattern.
+hourTime = request.security(syminfo.tickerid, "30", time, lookahead=barmerge.lookahead_on)
+hourTop = request.security(syminfo.tickerid, "30", high[1], lookahead=barmerge.lookahead_on)
+hourBottom = request.security(syminfo.tickerid, "30", low[1], lookahead=barmerge.lookahead_on)
+hourOldHigh = request.security(syminfo.tickerid, "30", high[3], lookahead=barmerge.lookahead_on)
+hourOldLow = request.security(syminfo.tickerid, "30", low[3], lookahead=barmerge.lookahead_on)
+hourBorn = request.security(syminfo.tickerid, "30", time[1], lookahead=barmerge.lookahead_on)
+
+// At chart resolutions above 30m, request.security() samples only one 1H
+// bar per chart bar. This version requires chart TF <= 1H for reliable
+// detection, but drawings persist when switching to higher chart TFs.
+chartSeconds = timeframe.in_seconds()
+canDetect = not na(chartSeconds) and chartSeconds <= 1800
+newHour = ta.change(hourTime) != 0
+
+if canDetect and newHour and not na(hourOldHigh) and not na(hourOldLow)
+    bullGap = hourBottom > hourOldHigh
+    bearGap = hourTop < hourOldLow
+    if bullGap or bearGap
+        zTop = bullGap ? hourBottom : hourOldLow
+        zBot = bullGap ? hourOldHigh : hourTop
+        b = box.new(left=hourBorn, top=zTop, right=time, bottom=zBot,
+            xloc=xloc.bar_time, extend=extend.right,
+            bgcolor=bullGap ? bullFill : bearFill,
+            border_color=bullGap ? color.new(color.teal, 25) : color.new(color.red, 25))
+        array.push(zoneBoxes, b)
+        array.push(zoneTop, zTop)
+        array.push(zoneBottom, zBot)
+        array.push(zoneBorn, hourBorn)
+        array.push(zoneBull, bullGap)
+
+// Touch mitigation and expiry. A bullish FVG is touched when price
+// falls to its top; a bearish FVG when price rises to its bottom.
+if array.size(zoneBoxes) > 0
+    for i = array.size(zoneBoxes) - 1 to 0
+        b = array.get(zoneBoxes, i)
+        top = array.get(zoneTop, i)
+        bot = array.get(zoneBottom, i)
+        born = array.get(zoneBorn, i)
+        isBull = array.get(zoneBull, i)
+        // Never mitigate on the 30m period the FVG is first confirmed.
+        touched = time > born and (isBull ? low <= top : high >= bot)
+        expired = time - born > lookbackHours * 1800000
+        if touched or expired
+            box.delete(b)
+            array.remove(zoneBoxes, i)
+            array.remove(zoneTop, i)
+            array.remove(zoneBottom, i)
+            array.remove(zoneBorn, i)
+            array.remove(zoneBull, i)
+
+// Keep under the TradingView box-object limit.
+while array.size(zoneBoxes) > maxZones
+    box.delete(array.shift(zoneBoxes))
+    array.shift(zoneTop)
+    array.shift(zoneBottom)
+    array.shift(zoneBorn)
+    array.shift(zoneBull)
+
+// =====================================================================
+// DAB-01 — 30m CRT (sweep + close inside preceding candle's full range)
+// Bullish: low[1] < low[2] and close[1] is inside [low[2], high[2]].
+// Bearish: high[1] > high[2] and close[1] is inside [low[2], high[2]].
+// No requirement for bullish/bearish candle body (DAE-19 filter removed).
+// Strict sweep; equality at previous extreme does not count.
+// Both signals may occur on an outside candle sweeping both extremes.
+// =====================================================================
+showCRT = input.bool(true, "Show 30m CRT arrows")
+maxCRTLabels = input.int(400, "Maximum CRT arrows", minval=1, maxval=490)
+crtColor = input.color(color.purple, "CRT arrow color")
+var array<label> crtLabels = array.new<label>()
+
+crtPrevHigh = request.security(syminfo.tickerid, "30", high[2], lookahead=barmerge.lookahead_on)
+crtPrevLow = request.security(syminfo.tickerid, "30", low[2], lookahead=barmerge.lookahead_on)
+crtConfirmedClose = request.security(syminfo.tickerid, "30", close[1], lookahead=barmerge.lookahead_on)
+crtConfirmedHigh = request.security(syminfo.tickerid, "30", high[1], lookahead=barmerge.lookahead_on)
+crtConfirmedLow = request.security(syminfo.tickerid, "30", low[1], lookahead=barmerge.lookahead_on)
+
+crtCloseInside = crtConfirmedClose >= crtPrevLow and crtConfirmedClose <= crtPrevHigh
+crtBull = crtConfirmedLow < crtPrevLow and crtCloseInside
+crtBear = crtConfirmedHigh > crtPrevHigh and crtCloseInside
+
+// Adjacency: CRT candle is also the third candle completing a new 30m FVG.
+// FVG direction is independent of CRT direction, as in the supplied example.
+crtAdjacentFVG = (hourBottom > hourOldHigh) or (hourTop < hourOldLow)
+
+if showCRT and canDetect and newHour and crtAdjacentFVG and not na(crtPrevLow) and not na(crtPrevHigh)
+    if crtBull
+        arrow = label.new(x=hourBorn, y=crtConfirmedLow, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowup, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+    if crtBear
+        arrow = label.new(x=hourBorn, y=crtConfirmedHigh, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowdown, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+
+while array.size(crtLabels) > maxCRTLabels
+    label.delete(array.shift(crtLabels))
+
+
+// =====================================================================
+// DAD-01 — Latest CRT+FVG: dynamic 5m volume profile
+// Calculation supported on 5-minute chart only.
+// 1m intrabar volume is allocated by price overlap.
+// This is an OHLCV approximation, NOT TradingView's native tick profile.
+// =====================================================================
+vpBins = input.int(60, "DAD VP rows", minval=10, maxval=80)
+vpValueArea = input.float(0.70, "DAD value area", minval=0.50, maxval=0.95, step=0.05)
+vpMaxCandles = input.int(4000, "DAD max 1m candles", minval=100, maxval=8000)
+vpWidthMinutes = input.int(45, "DAD histogram maximum width (minutes)", minval=5, maxval=240)
+vpHistogramColor = input.color(color.new(color.gray, 85), "DAD histogram (gray)")
+vpVAColor = input.color(color.new(color.silver, 78), "DAD value area histogram (gray)")
+vpPOCColor = input.color(color.black, "DAD POC")
+vpVAHColor = input.color(color.black, "DAD VAH")
+vpVALColor = input.color(color.black, "DAD VAL")
+
+// DAE-20 supports 1m, 5m and 30m charts, using 1m source candles.
+// Only confirmed 5m bars are ingested to avoid realtime double counting.
+vpCanRun = timeframe.isminutes and (timeframe.multiplier == 1 or timeframe.multiplier == 5 or timeframe.multiplier == 30)
+vpIsOneMinute = timeframe.isminutes and timeframe.multiplier == 1
+[ltfT, ltfH, ltfL, ltfV] = request.security_lower_tf(syminfo.tickerid, "1", [time, high, low, volume])
+
+var array<int> cacheT = array.new_int()
+var array<float> cacheH = array.new_float()
+var array<float> cacheL = array.new_float()
+var array<float> cacheV = array.new_float()
+var array<int> profileT = array.new_int()
+var array<float> profileH = array.new_float()
+var array<float> profileL = array.new_float()
+var array<float> profileV = array.new_float()
+var bool vpActive = false
+var bool vpIsBullFVG = false
+var int vpTradeDirection = 0
+var float vpGapTop = na
+var float vpGapBottom = na
+var int vpBorn = na
+var int vpActivationTime = na
+var float vpCreatorHigh = na
+var float vpCreatorLow = na
+
+// Detect the completed 30m CRT/FVG on the first bar of the next 30m period.
+vpNewSignal = vpCanRun and newHour and crtAdjacentFVG and (crtBull or crtBear) and not na(hourBorn)
+if vpNewSignal
+    array.clear(profileT)
+    array.clear(profileH)
+    array.clear(profileL)
+    array.clear(profileV)
+    vpActive := true
+    vpBorn := hourBorn
+    vpCreatorHigh := hourTop
+    vpCreatorLow := hourBottom
+    vpActivationTime := time
+    vpTradeDirection := crtBull and not crtBear ? 1 : crtBear and not crtBull ? -1 : 0
+    vpIsBullFVG := hourBottom > hourOldHigh
+    vpGapTop := vpIsBullFVG ? hourBottom : hourOldLow
+    vpGapBottom := vpIsBullFVG ? hourOldHigh : hourTop
+    if array.size(cacheT) > 0
+        for j = 0 to array.size(cacheT) - 1
+            t = array.get(cacheT, j)
+            if t >= vpBorn
+                array.push(profileT, t)
+                array.push(profileH, array.get(cacheH, j))
+                array.push(profileL, array.get(cacheL, j))
+                array.push(profileV, array.get(cacheV, j))
+
+// On a 1m chart, use native 1m OHLCV directly.
+// On 5m/30m charts, reconstruct from confirmed 1m intrabars.
+if vpCanRun and barstate.isconfirmed
+    if vpIsOneMinute
+        array.push(cacheT, time)
+        array.push(cacheH, high)
+        array.push(cacheL, low)
+        array.push(cacheV, nz(volume))
+        if array.size(cacheT) > 120
+            array.shift(cacheT)
+            array.shift(cacheH)
+            array.shift(cacheL)
+            array.shift(cacheV)
+        if vpActive and time >= vpBorn
+            array.push(profileT, time)
+            array.push(profileH, high)
+            array.push(profileL, low)
+            array.push(profileV, nz(volume))
+    else
+        intrabars = array.size(ltfT)
+        if intrabars > 0
+            for j = 0 to intrabars - 1
+                t = array.get(ltfT, j)
+                h = array.get(ltfH, j)
+                l = array.get(ltfL, j)
+                v = nz(array.get(ltfV, j))
+                array.push(cacheT, t)
+                array.push(cacheH, h)
+                array.push(cacheL, l)
+                array.push(cacheV, v)
+                if array.size(cacheT) > 120
+                    array.shift(cacheT)
+                    array.shift(cacheH)
+                    array.shift(cacheL)
+                    array.shift(cacheV)
+                if vpActive and t >= vpBorn
+                    array.push(profileT, t)
+                    array.push(profileH, h)
+                    array.push(profileL, l)
+                    array.push(profileV, v)
+
+// Match the FVG's touch-mitigation definition from DAC-02.
+if vpActive and time > vpActivationTime
+    if vpIsBullFVG ? low <= vpGapTop : high >= vpGapBottom
+        vpActive := false
+
+// Expire untouched profile when a completed 30m candle closes beyond
+// the high/low of the 30m candle that created the FVG.
+if vpActive and newHour and time > vpActivationTime
+    if vpIsBullFVG ? crtConfirmedClose > vpCreatorHigh : crtConfirmedClose < vpCreatorLow
+        vpActive := false
+
+// A bounded working range prevents excessive Pine execution costs.
+// The range starts at the FVG's formation and grows until mitigation;
+// if this cap is reached, the oldest 5m candles are discarded.
+if array.size(profileT) > vpMaxCandles
+    array.shift(profileT)
+    array.shift(profileH)
+    array.shift(profileL)
+    array.shift(profileV)
+
+// DAE-20 — three independently switchable entry levels.
+entryLevel = input.string("VA Close", "Entry Level", options=["VA Close", "VA Far", "POC"], group="DAE-20 Position")
+positionWidth = input.int(2, "Position box width (hours)", minval=1, maxval=2, group="DAE-20 Position")
+var array<box> positionBoxes = array.new<box>()
+var array<line> positionLines = array.new<line>()
+var array<label> resultLabels = array.new<label>()
+var array<int> resultLabelTimes = array.new<int>()
+var array<int> positionExpiry = array.new<int>()
+var int lastPositionBorn = na
+maxPositionHistory = input.int(100, "Max historical position boxes", minval=1, maxval=140, group="DAE-20 Position")
+
+// Return the nearest FVG boundary that lies in the profitable direction.
+f_nearestTarget(float entry, float edgeA, float edgeB, int dir) =>
+    float result = na
+    bool validA = dir == 1 ? edgeA > entry : edgeA < entry
+    bool validB = dir == 1 ? edgeB > entry : edgeB < entry
+    if validA and validB
+        result := math.abs(edgeA - entry) <= math.abs(edgeB - entry) ? edgeA : edgeB
+    else if validA
+        result := edgeA
+    else if validB
+        result := edgeB
+    result
+
+f_position(float entry, float target, float stop, int dir, string caption, int leftT, int rightT) =>
+    if not na(target) and target != entry and dir != 0
+        box rewardBox = box.new(leftT, math.max(entry, target), rightT, math.min(entry, target), xloc=xloc.bar_time, bgcolor=color.new(color.green, 78), border_color=color.new(color.green, 35))
+        box riskBox = box.new(leftT, math.max(entry, stop), rightT, math.min(entry, stop), xloc=xloc.bar_time, bgcolor=color.new(color.red, 78), border_color=color.new(color.red, 35))
+        array.push(positionBoxes, rewardBox)
+        array.push(positionBoxes, riskBox)
+        array.push(positionLines, line.new(leftT, entry, rightT, entry, xloc=xloc.bar_time, color=color.white, width=2))
+        array.push(positionExpiry, leftT + 1000 * 3600000)
+        // Outcome labels are drawn only after a real closed trade.
+
+// DAE-20 backtest: freeze the selected entry, stop and target when
+// a confirmed bar first provides a usable VP. Only one pending order.
+entryOrderMode = input.string("Auto", "Entry Order Mode", options=["Auto", "Stop Only", "Limit Only"], group="DAE-20 Strategy")
+rrChoice = input.string("1:1", "Risk/Reward (FVG target fixed)", options=["1:1", "1:1.5", "1:2"], group="DAE-20 Exit")
+stopMode = input.string("Fixed", "Stoploss mode", options=["Fixed", "Trailing"], group="DAE-20 Exit")
+useTakeProfit = input.bool(true, "Enable Take Profit", group="DAE-20 Exit")
+trailActivationTicks = input.int(20, "Trailing activation (ticks in profit)", minval=1, group="DAE-20 Exit")
+trailDistanceTicks = input.int(20, "Trailing distance (ticks)", minval=1, group="DAE-20 Exit")
+maxRiskUSD = input.float(200.0, "Maximum initial risk per contract (USD)", minval=1.0, step=5.0, group="DAE-20 Exit")
+rrValue = rrChoice == "1:2" ? 2.0 : rrChoice == "1:1.5" ? 1.5 : 1.0
+// Diagnostic counters are historical, not last-bar drawings.
+var int auditSignals = 0
+var int auditCandidates = 0
+var int auditOrders = 0
+var int auditFiltered = 0
+var int auditFilled = 0
+var int auditExpired = 0
+var int auditClosed = 0
+var int lastClosedCount = 0
+var int lastOpenCount = 0
+if vpNewSignal
+    auditSignals += 1
+if strategy.closedtrades > lastClosedCount
+    for tradeIdx = lastClosedCount to strategy.closedtrades - 1
+        tradePnl = strategy.closedtrades.profit(tradeIdx)
+        exitT = strategy.closedtrades.exit_time(tradeIdx)
+        exitP = strategy.closedtrades.exit_price(tradeIdx)
+        if tradePnl != 0 and not na(exitT) and not na(exitP)
+            isWinner = tradePnl > 0
+            outcomeLabel = label.new(exitT, exitP, isWinner ? "W" : "L", xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_center, color=isWinner ? color.green : color.red, textcolor=color.white, size=size.tiny)
+            array.push(resultLabels, outcomeLabel)
+            array.push(resultLabelTimes, exitT)
+    auditClosed += strategy.closedtrades - lastClosedCount
+    lastClosedCount := strategy.closedtrades
+// Retain outcome labels for 1000 hours, subject to TradingView object limits.
+if array.size(resultLabels) > 0
+    for i = array.size(resultLabels) - 1 to 0
+        if time - array.get(resultLabelTimes, i) > 1000 * 3600000
+            label.delete(array.remove(resultLabels, i))
+            array.remove(resultLabelTimes, i)
+while array.size(resultLabels) > 140
+    label.delete(array.shift(resultLabels))
+    array.shift(resultLabelTimes)
+if strategy.opentrades > lastOpenCount
+    auditFilled += strategy.opentrades - lastOpenCount
+lastOpenCount := strategy.opentrades
+var string pendingId = ""
+var int pendingBorn = na
+var float pendingEntry = na
+var float pendingTarget = na
+var float pendingStop = na
+var bool setupSubmitted = false
+var float protectedStop = na
+var float favorableExtreme = na
+var bool trailingArmed = false
+var int fillBar = na
+if vpNewSignal
+    if pendingId != "" and strategy.position_size == 0
+        strategy.cancel(pendingId)
+    pendingId := ""
+    setupSubmitted := false
+
+// Independently calculate the historical profile on EVERY confirmed bar.
+// The last-bar drawing code below remains presentation-only.
+if vpCanRun and barstate.isconfirmed and vpActive and not setupSubmitted and strategy.position_size == 0 and array.size(profileH) > 0
+    btHi = array.max(profileH)
+    btLo = array.min(profileL)
+    btSpan = btHi - btLo
+    if btSpan > 0
+        btStep = btSpan / vpBins
+        btHist = array.new_float(vpBins, 0.0)
+        for j = 0 to array.size(profileH) - 1
+            hh = array.get(profileH, j)
+            ll = array.get(profileL, j)
+            vv = array.get(profileV, j)
+            firstBin = int(math.max(0, math.min(vpBins - 1, math.floor((ll - btLo) / btStep))))
+            lastBin = int(math.max(0, math.min(vpBins - 1, math.floor((hh - btLo) / btStep))))
+            if hh > ll
+                for k = firstBin to lastBin
+                    overlap = math.max(0.0, math.min(hh, btLo + (k + 1) * btStep) - math.max(ll, btLo + k * btStep))
+                    if overlap > 0
+                        array.set(btHist, k, array.get(btHist, k) + vv * overlap / (hh - ll))
+            else
+                array.set(btHist, firstBin, array.get(btHist, firstBin) + vv)
+        btPoc = array.indexof(btHist, array.max(btHist))
+        btLeft = btPoc
+        btRight = btPoc
+        btAccum = array.get(btHist, btPoc)
+        btTotal = array.sum(btHist)
+        for j = 0 to vpBins - 1
+            if btAccum >= btTotal * vpValueArea
+                break
+            leftVol = btLeft > 0 ? array.get(btHist, btLeft - 1) : -1.0
+            rightVol = btRight < vpBins - 1 ? array.get(btHist, btRight + 1) : -1.0
+            if rightVol > leftVol and btRight < vpBins - 1
+                btRight += 1
+                btAccum += array.get(btHist, btRight)
+            else if btLeft > 0
+                btLeft -= 1
+                btAccum += array.get(btHist, btLeft)
+            else if btRight < vpBins - 1
+                btRight += 1
+                btAccum += array.get(btHist, btRight)
+        btVAH = btLo + (btRight + 1) * btStep
+        btVAL = btLo + btLeft * btStep
+        btPOC = btLo + (btPoc + 0.5) * btStep
+        btEntry = entryLevel == "VA Close" ? (vpTradeDirection == 1 ? btVAH : btVAL) : entryLevel == "VA Far" ? (vpTradeDirection == 1 ? btVAL : btVAH) : btPOC
+        if vpTradeDirection != 0 and not na(btEntry)
+            btEntry := math.round_to_mintick(btEntry)
+            btTarget = f_nearestTarget(btEntry, vpGapTop, vpGapBottom, vpTradeDirection)
+            if not na(btTarget)
+                btTarget := math.round_to_mintick(btTarget)
+                btStop = math.round_to_mintick(btEntry - vpTradeDirection * math.abs(btTarget - btEntry) / rrValue)
+                if math.abs(btTarget - btEntry) >= syminfo.mintick
+                    auditCandidates += 1
+                    pendingId := vpTradeDirection == 1 ? "DAE-L" : "DAE-S"
+                    pendingBorn := vpBorn
+                    pendingEntry := btEntry
+                    pendingTarget := btTarget
+                    pendingStop := math.round_to_mintick(vpTradeDirection == 1 ? math.max(btStop, btEntry - maxRiskUSD / syminfo.pointvalue) : math.min(btStop, btEntry + maxRiskUSD / syminfo.pointvalue))
+                    // Classify from the confirmed signal bar's closing price.
+                    // Long: entry above close -> stop, below -> limit.
+                    // Short: entry below close -> stop, above -> limit.
+                    bool isStopOrder = vpTradeDirection == 1 ? pendingEntry > close : pendingEntry < close
+                    bool isLimitOrder = vpTradeDirection == 1 ? pendingEntry < close : pendingEntry > close
+                    bool orderAllowed = entryOrderMode == "Auto" or (entryOrderMode == "Stop Only" and isStopOrder) or (entryOrderMode == "Limit Only" and isLimitOrder)
+                    setupSubmitted := true
+                    if orderAllowed
+                        auditOrders += 1
+                        // Historical drawings are created when the actual order is submitted,
+                        // independent of trade outcome and profile lifetime.
+                        int boxEnd = time + positionWidth * 3600000
+                        f_position(pendingEntry, pendingTarget, pendingStop, vpTradeDirection, entryLevel, time, boxEnd)
+                        while array.size(positionExpiry) > maxPositionHistory
+                            box.delete(array.shift(positionBoxes))
+                            box.delete(array.shift(positionBoxes))
+                            line.delete(array.shift(positionLines))
+
+                            array.shift(positionExpiry)
+                        if vpTradeDirection == 1
+                            if isStopOrder
+                                strategy.entry(pendingId, strategy.long, stop=pendingEntry)
+                            else
+                                strategy.entry(pendingId, strategy.long, limit=pendingEntry)
+                        else
+                            if isStopOrder
+                                strategy.entry(pendingId, strategy.short, stop=pendingEntry)
+                            else
+                                strategy.entry(pendingId, strategy.short, limit=pendingEntry)
+                        // Protective fixed stop is ALWAYS attached from submission, including trailing mode.
+                        strategy.exit("Exit-" + pendingId, from_entry=pendingId, stop=pendingStop, limit=useTakeProfit ? pendingTarget : na)
+                    else
+                        auditFiltered += 1
+                        pendingId := ""
+
+// DAE-20 trailing: update only after confirmed 1m/5m/30m bars.
+// The original protective stop is active throughout, including before activation.
+// Use the previous completed bar to avoid deriving a stop from a bar that already hit it.
+if strategy.position_size != 0 and strategy.position_size[1] == 0
+    protectedStop := pendingStop
+    favorableExtreme := strategy.position_avg_price
+    trailingArmed := false
+    fillBar := bar_index
+if strategy.position_size != 0 and stopMode == "Trailing" and barstate.isconfirmed and not na(protectedStop)
+    bool isLong = strategy.position_size > 0
+    float activation = trailActivationTicks * syminfo.mintick
+    float distance = trailDistanceTicks * syminfo.mintick
+    if bar_index > nz(fillBar, bar_index) and not na(high[1]) and not na(low[1])
+        favorableExtreme := isLong ? math.max(favorableExtreme, high[1]) : math.min(favorableExtreme, low[1])
+        if isLong ? favorableExtreme >= strategy.position_avg_price + activation : favorableExtreme <= strategy.position_avg_price - activation
+            trailingArmed := true
+        if trailingArmed
+            float candidate = isLong ? favorableExtreme - distance : favorableExtreme + distance
+            protectedStop := math.round_to_mintick(isLong ? math.max(protectedStop, candidate) : math.min(protectedStop, candidate))
+    strategy.exit("Exit-" + pendingId, from_entry=pendingId, stop=protectedStop, limit=useTakeProfit ? pendingTarget : na)
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    protectedStop := na
+    favorableExtreme := na
+    trailingArmed := false
+    fillBar := na
+
+// An unfilled order is cancelled when the associated profile expires.
+if not vpActive and pendingId != "" and strategy.position_size == 0
+    auditExpired += 1
+    strategy.cancel(pendingId)
+    pendingId := ""
+
+var array<box> vpDrawBoxes = array.new<box>()
+var line vpPocLine = na
+var line vpVahLine = na
+var line vpValLine = na
+
+// Draw only on the latest chart bar; history is processed into arrays,
+// then one up-to-date profile is rendered.
+if barstate.islast
+    if array.size(vpDrawBoxes) > 0
+        for j = array.size(vpDrawBoxes) - 1 to 0
+            box.delete(array.get(vpDrawBoxes, j))
+        array.clear(vpDrawBoxes)
+    if not na(vpPocLine)
+        line.delete(vpPocLine)
+        vpPocLine := na
+    if not na(vpVahLine)
+        line.delete(vpVahLine)
+        vpVahLine := na
+    if not na(vpValLine)
+        line.delete(vpValLine)
+        vpValLine := na
+
+    n = array.size(profileT)
+    if vpActive and vpCanRun and n > 0
+        rangeHi = array.max(profileH)
+        rangeLo = array.min(profileL)
+        span = rangeHi - rangeLo
+        if span > 0
+            step = span / vpBins
+            hist = array.new_float(vpBins, 0.0)
+            for j = 0 to n - 1
+                hh = array.get(profileH, j)
+                ll = array.get(profileL, j)
+                vv = array.get(profileV, j)
+                b0 = int(math.max(0, math.min(vpBins - 1, math.floor((ll - rangeLo) / step))))
+                b1 = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                // Distribute volume proportionally to candle/bin price overlap.
+                candleRange = hh - ll
+                if candleRange > 0
+                    for k = b0 to b1
+                        binLow = rangeLo + k * step
+                        binHigh = binLow + step
+                        overlap = math.max(0.0, math.min(hh, binHigh) - math.max(ll, binLow))
+                        if overlap > 0
+                            array.set(hist, k, array.get(hist, k) + vv * overlap / candleRange)
+                else
+                    midBin = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                    array.set(hist, midBin, array.get(hist, midBin) + vv)
+
+            maxV = array.max(hist)
+            totalV = array.sum(hist)
+            pocIndex = array.indexof(hist, maxV)
+            vaLeft = pocIndex
+            vaRight = pocIndex
+            vaVolume = array.get(hist, pocIndex)
+            for j = 0 to vpBins - 1
+                if vaVolume >= totalV * vpValueArea
+                    break
+                leftVol = vaLeft > 0 ? array.get(hist, vaLeft - 1) : -1.0
+                rightVol = vaRight < vpBins - 1 ? array.get(hist, vaRight + 1) : -1.0
+                if rightVol > leftVol and vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+                else if vaLeft > 0
+                    vaLeft -= 1
+                    vaVolume += array.get(hist, vaLeft)
+                else if vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+
+            pocPrice = rangeLo + (pocIndex + 0.5) * step
+            vahPrice = rangeLo + (vaRight + 1) * step
+            valPrice = rangeLo + vaLeft * step
+            baseTime = time
+            maxWidthMs = vpWidthMinutes * 60000
+            for k = 0 to vpBins - 1
+                vol = array.get(hist, k)
+                if vol > 0 and maxV > 0
+                    rightTime = baseTime + int(math.max(60000, maxWidthMs * vol / maxV))
+                    boxColor = k >= vaLeft and k <= vaRight ? vpVAColor : vpHistogramColor
+                    b = box.new(left=baseTime, top=rangeLo + (k + 1) * step,
+                        right=rightTime, bottom=rangeLo + k * step,
+                        xloc=xloc.bar_time, bgcolor=boxColor,
+                        border_color=color.new(boxColor, 100))
+                    array.push(vpDrawBoxes, b)
+
+            vpPocLine := line.new(vpBorn, pocPrice, time, pocPrice,
+                 xloc=xloc.bar_time, color=vpPOCColor, width=2)
+            vpVahLine := line.new(vpBorn, vahPrice, time, vahPrice,
+                 xloc=xloc.bar_time, color=vpVAHColor, style=line.style_dashed)
+            vpValLine := line.new(vpBorn, valPrice, time, valPrice,
+                 xloc=xloc.bar_time, color=vpVALColor, style=line.style_dashed)
+
+
+// DAE-21: read-only Strategy Tester parity dashboard; trading logic is identical to DAE-20.
+// Set TradingView Deep Backtesting to Last 365 days on MNQ1! 1m.
+var table auditPanel = table.new(position.top_right, 2, 17, border_width=1)
+closedN = strategy.closedtrades
+winsN = strategy.wintrades
+lossN = strategy.losstrades
+winPct = closedN > 0 ? 100.0 * winsN / closedN : na
+pf = strategy.grossloss > 0 ? strategy.grossprofit / strategy.grossloss : na
+f_money(float x) => str.tostring(x, "#,##0.00")
+if barstate.islast
+    table.cell(auditPanel, 0, 7, "PARITY / Strategy Tester", bgcolor=color.new(color.blue, 70), text_color=color.white)
+    table.cell(auditPanel, 1, 7, "DAE-21", bgcolor=color.new(color.blue, 70), text_color=color.white)
+    table.cell(auditPanel, 0, 8, "Net PnL (USD)")
+    table.cell(auditPanel, 1, 8, f_money(strategy.netprofit))
+    table.cell(auditPanel, 0, 9, "Max equity drawdown (USD)")
+    table.cell(auditPanel, 1, 9, f_money(strategy.max_drawdown))
+    table.cell(auditPanel, 0, 10, "Closed / winners")
+    table.cell(auditPanel, 1, 10, str.tostring(closedN) + " / " + str.tostring(winsN))
+    table.cell(auditPanel, 0, 11, "Winrate (%)")
+    table.cell(auditPanel, 1, 11, str.tostring(winPct, "#.##"))
+    table.cell(auditPanel, 0, 12, "Profit factor")
+    table.cell(auditPanel, 1, 12, str.tostring(pf, "#.###"))
+    table.cell(auditPanel, 0, 13, "Gross profit / loss")
+    table.cell(auditPanel, 1, 13, f_money(strategy.grossprofit) + " / " + f_money(strategy.grossloss))
+    table.cell(auditPanel, 0, 14, "Open PnL (USD)")
+    table.cell(auditPanel, 1, 14, f_money(strategy.openprofit))
+    table.cell(auditPanel, 0, 15, "Symbol / TF")
+    table.cell(auditPanel, 1, 15, syminfo.ticker + " / " + timeframe.period)
+    table.cell(auditPanel, 0, 16, "Settings / range")
+    table.cell(auditPanel, 1, 16, "Match DAE-20 / Last 365d")
+if barstate.islast
+    table.cell(auditPanel, 0, 0, "DAE-20 AUDIT")
+    table.cell(auditPanel, 1, 0, "Count")
+    table.cell(auditPanel, 0, 1, "CRT+FVG signals")
+    table.cell(auditPanel, 1, 1, str.tostring(auditSignals))
+    table.cell(auditPanel, 0, 2, "Valid candidates")
+    table.cell(auditPanel, 1, 2, str.tostring(auditCandidates))
+    table.cell(auditPanel, 0, 3, "Orders placed")
+    table.cell(auditPanel, 1, 3, str.tostring(auditOrders))
+    table.cell(auditPanel, 0, 4, "Mode filtered")
+    table.cell(auditPanel, 1, 4, str.tostring(auditFiltered))
+    table.cell(auditPanel, 0, 5, "Orders cancelled")
+    table.cell(auditPanel, 1, 5, str.tostring(auditExpired))
+    table.cell(auditPanel, 0, 6, "Closed trades")
+    table.cell(auditPanel, 1, 6, str.tostring(strategy.closedtrades))
