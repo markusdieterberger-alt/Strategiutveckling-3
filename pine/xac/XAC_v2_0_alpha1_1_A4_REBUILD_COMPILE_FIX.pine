@@ -1,0 +1,453 @@
+//@version=6
+strategy(
+     "XAC v2.0-alpha1.1 — REBUILD A4",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = false,
+     calc_on_order_fills = false,
+     calc_on_every_tick = false,
+     initial_capital = 25000,
+     margin_long = 0,
+     margin_short = 0,
+     commission_type = strategy.commission.cash_per_contract,
+     commission_value = 0.50,
+     slippage = 1
+)
+
+// ============================================================================
+// XAC v2.0-alpha1.1 — CLEAN REBUILD
+// Stage 1: execution shell + A4 only.
+// alpha1.1: Pine compile fix for multiline attached-FVG boolean expression.
+//
+// Source identity:
+// XAC_v1_6_EXACT_SCALP_EXECUTION_PARITY.pine is used only as preserved
+// behavioral specification. This file is a fresh implementation.
+//
+// A4 frozen behavior:
+// 30m CRT + attached same-bar FVG + sweep minute 10..19 + >=60% recovery
+// + legacy Stockholm time window + 1m HH/LL no-touch confirmation
+// + FAR FVG target + structural stop.
+//
+// Mobile QA is first-class:
+// explicit signal/order/fill/exit marks + compact dashboard.
+// ============================================================================
+
+string TZ = "Europe/Stockholm"
+float TICK = syminfo.mintick
+float MNQ_POINT_VALUE = 2.0
+
+string G0 = "00 — Rebuild"
+bool USE_A4 = input.bool(true, "A4 enabled", group = G0)
+bool SHOW_MARKS = input.bool(true, "Show explicit QA marks", group = G0)
+bool SHOW_LEVELS = input.bool(true, "Show A4 levels", group = G0)
+bool SHOW_DASH = input.bool(true, "Show mobile dashboard", group = G0)
+
+string G1 = "01 — A4 frozen"
+float RISK_A4_USD = input.float(550.0, "A4 risk USD", step = 10, group = G1)
+int MAX_MNQ = input.int(20, "Max MNQ", minval = 1, maxval = 20, group = G1)
+int FLAT_HOUR_STHLM = input.int(22, "Flat hour Stockholm", minval = 0, maxval = 23, group = G1)
+
+if barstate.isfirst
+    if not chart.is_standard
+        runtime.error("Use standard candles.")
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("Use MNQ 1-minute chart.")
+
+f_entry_allowed(int h) =>
+    (h >= 12 and h < 15) or (h >= 16 and h < 21)
+
+f_qty(float entryPx, float stopPx, float riskUsd) =>
+    float riskPts = math.abs(entryPx - stopPx)
+    float usdPerContract = riskPts * MNQ_POINT_VALUE
+    int q = usdPerContract > 0 ? int(math.floor(riskUsd / usdPerContract)) : 0
+    math.max(0, math.min(MAX_MNQ, q))
+
+f_pf() =>
+    float gl = math.abs(strategy.grossloss)
+    gl > 0 ? strategy.grossprofit / gl : na
+
+// ============================================================================
+// 30m A4 STATE — built causally from 1m bars.
+// ============================================================================
+
+var float cur30O = na
+var float cur30H = na
+var float cur30L = na
+var float cur30C = na
+var int cur30LowMinute = na
+var int cur30HighMinute = na
+var int cur30MinuteIndex = 0
+
+var float prev1H = na
+var float prev1L = na
+var float prev2H = na
+var float prev2L = na
+
+var bool a4Pending = false
+var int a4Dir = 0
+var float a4Near = na
+var float a4Far = na
+var float a4Stop = na
+var int a4SignalBar = na
+
+// Funnel counters.
+var int c30Closed = 0
+var int cCrt = 0
+var int cAttached = 0
+var int cSweep = 0
+var int cRecovery = 0
+var int cTime = 0
+var int cA4Qualified = 0
+var int cCancelledNear = 0
+var int cCancelledStop = 0
+var int cConfirm = 0
+var int cOrders = 0
+var int cFills = 0
+var int cClosed = 0
+
+var int cLongQualified = 0
+var int cShortQualified = 0
+
+var string pendingOrderId = ""
+var string activeEntryId = ""
+
+bool new30 = ta.change(time("30")) != 0
+
+// Initialize first 30m aggregation.
+if barstate.isfirst
+    cur30O := open
+    cur30H := high
+    cur30L := low
+    cur30C := close
+    cur30LowMinute := 0
+    cur30HighMinute := 0
+    cur30MinuteIndex := 0
+
+// At the first 1m bar of a new 30m block, finalize the prior completed 30m bar.
+if new30 and not barstate.isfirst
+    c30Closed += 1
+
+    int crtDir = 0
+    bool historyReady = not na(prev1H) and not na(prev1L) and not na(prev2H) and not na(prev2L)
+
+    if historyReady
+        // Frozen CRT definition.
+        if cur30H > prev1H and cur30L > prev1L and cur30C < prev1H
+            crtDir := -1
+        else if cur30L < prev1L and cur30H < prev1H and cur30C > prev1L
+            crtDir := 1
+
+    bool isCrt = crtDir != 0
+    if isCrt
+        cCrt += 1
+
+    // Attached FVG made by the CRT candle versus two completed 30m bars back.
+    bool attached = false
+    if isCrt
+        attached := (crtDir == 1 and cur30H < prev2L) or (crtDir == -1 and cur30L > prev2H)
+    if attached
+        cAttached += 1
+
+    int sweepMinute = crtDir == 1 ? cur30LowMinute : cur30HighMinute
+    bool sweepOK = attached and sweepMinute >= 10 and sweepMinute <= 19
+    if sweepOK
+        cSweep += 1
+
+    float rng = cur30H - cur30L
+    float recovery = 0.0
+    if rng > 0
+        recovery := crtDir == 1 ? (cur30C - cur30L) / rng : (cur30H - cur30C) / rng
+
+    bool recoveryOK = sweepOK and recovery >= 0.60
+    if recoveryOK
+        cRecovery += 1
+
+    // The prior 30m bar closed exactly where this new bar opens.
+    int completedCloseHour = hour(time, TZ)
+    bool timeOK = recoveryOK and f_entry_allowed(completedCloseHour)
+    if timeOK
+        cTime += 1
+
+    bool qualified = USE_A4 and timeOK
+
+    if qualified
+        a4Pending := true
+        a4Dir := crtDir
+        a4Near := crtDir == 1 ? cur30H : cur30L
+        a4Far := crtDir == 1 ? prev2L : prev2H
+        a4Stop := crtDir == 1 ? cur30L - TICK : cur30H + TICK
+        a4SignalBar := bar_index
+
+        cA4Qualified += 1
+        if crtDir == 1
+            cLongQualified += 1
+        else
+            cShortQualified += 1
+
+    // Shift completed HTF history.
+    prev2H := prev1H
+    prev2L := prev1L
+    prev1H := cur30H
+    prev1L := cur30L
+
+    // Start new 30m aggregation using current 1m bar.
+    cur30O := open
+    cur30H := high
+    cur30L := low
+    cur30C := close
+    cur30LowMinute := 0
+    cur30HighMinute := 0
+    cur30MinuteIndex := 0
+
+else if not barstate.isfirst
+    // Continue current 30m aggregation.
+    cur30MinuteIndex += 1
+
+    if high > cur30H
+        cur30H := high
+        cur30HighMinute := cur30MinuteIndex
+
+    if low < cur30L
+        cur30L := low
+        cur30LowMinute := cur30MinuteIndex
+
+    cur30C := close
+
+// ============================================================================
+// A4 PENDING STATE + HH/LL CONFIRMATION
+// Frozen rule: cancel if NEAR is touched before confirmation.
+// ============================================================================
+
+bool qaQualifiedLong = false
+bool qaQualifiedShort = false
+bool qaConfirmLong = false
+bool qaConfirmShort = false
+bool qaOrderLong = false
+bool qaOrderShort = false
+
+if a4Pending and strategy.position_size == 0
+    bool nearTouched = a4Dir == 1 ? high >= a4Near : low <= a4Near
+    bool stopInvalid = a4Dir == 1 ? low <= a4Stop : high >= a4Stop
+    bool flatInvalid = hour(time_close, TZ) >= FLAT_HOUR_STHLM
+
+    if nearTouched
+        a4Pending := false
+        cCancelledNear += 1
+    else if stopInvalid
+        a4Pending := false
+        cCancelledStop += 1
+    else if flatInvalid
+        a4Pending := false
+    else
+        bool hhll = a4Dir == 1 ? high > high[1] : low < low[1]
+
+        if hhll
+            cConfirm += 1
+            qaConfirmLong := a4Dir == 1
+            qaConfirmShort := a4Dir == -1
+
+            float plannedEntry = close
+            int qty = f_qty(plannedEntry, a4Stop, RISK_A4_USD)
+
+            if qty > 0
+                if a4Dir == 1
+                    strategy.entry("A4-L", strategy.long, qty = qty, comment = "A4")
+                    strategy.exit("A4-L-X", "A4-L", stop = a4Stop, limit = a4Far)
+                    pendingOrderId := "A4-L"
+                    qaOrderLong := true
+                else
+                    strategy.entry("A4-S", strategy.short, qty = qty, comment = "A4")
+                    strategy.exit("A4-S-X", "A4-S", stop = a4Stop, limit = a4Far)
+                    pendingOrderId := "A4-S"
+                    qaOrderShort := true
+
+                cOrders += 1
+
+            a4Pending := false
+
+// Qualification marks on the 1m bar where completed 30m state became known.
+qaQualifiedLong := new30 and a4Pending and a4Dir == 1
+qaQualifiedShort := new30 and a4Pending and a4Dir == -1
+
+// ============================================================================
+// FILL / EXIT OBSERVABILITY
+// ============================================================================
+
+bool justOpened = strategy.position_size != 0 and strategy.position_size[1] == 0
+bool justClosed = strategy.position_size == 0 and strategy.position_size[1] != 0
+
+bool fillLong = justOpened and strategy.position_size > 0
+bool fillShort = justOpened and strategy.position_size < 0
+
+if justOpened
+    cFills += 1
+    activeEntryId := pendingOrderId
+    pendingOrderId := ""
+
+if justClosed
+    cClosed += 1
+    activeEntryId := ""
+
+// Same-day hard flat.
+if hour(time, TZ) == FLAT_HOUR_STHLM and minute(time, TZ) == 0
+    strategy.close_all(comment = "XAC FLAT")
+    a4Pending := false
+
+// ============================================================================
+// VISUAL QA MARKS — independent of native TradingView execution marks.
+// ============================================================================
+
+plotshape(
+     SHOW_MARKS and qaConfirmLong,
+     title = "A4 LONG CONFIRM",
+     style = shape.triangleup,
+     location = location.belowbar,
+     text = "A4?",
+     textcolor = color.white,
+     color = color.new(color.green, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaConfirmShort,
+     title = "A4 SHORT CONFIRM",
+     style = shape.triangledown,
+     location = location.abovebar,
+     text = "A4?",
+     textcolor = color.white,
+     color = color.new(color.red, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderLong,
+     title = "A4 LONG ORDER",
+     style = shape.circle,
+     location = location.belowbar,
+     text = "O",
+     textcolor = color.white,
+     color = color.green,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderShort,
+     title = "A4 SHORT ORDER",
+     style = shape.circle,
+     location = location.abovebar,
+     text = "O",
+     textcolor = color.white,
+     color = color.red,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and fillLong,
+     title = "A4 LONG FILL",
+     style = shape.labelup,
+     location = location.belowbar,
+     text = "A4 L",
+     textcolor = color.white,
+     color = color.green,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and fillShort,
+     title = "A4 SHORT FILL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     text = "A4 S",
+     textcolor = color.white,
+     color = color.red,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and justClosed,
+     title = "A4 EXIT",
+     style = shape.xcross,
+     location = location.abovebar,
+     text = "X",
+     color = color.black,
+     size = size.small
+)
+
+plot(SHOW_LEVELS and a4Pending ? a4Near : na, "A4 near", color = color.new(color.orange, 20), style = plot.style_linebr)
+plot(SHOW_LEVELS and a4Pending ? a4Far : na, "A4 FAR", color = color.new(color.green, 20), style = plot.style_linebr)
+plot(SHOW_LEVELS and a4Pending ? a4Stop : na, "A4 SL", color = color.new(color.red, 20), style = plot.style_linebr)
+
+// ============================================================================
+// MOBILE DASHBOARD
+// ============================================================================
+
+var table dash = table.new(position.top_right, 4, 12, border_width = 1)
+
+if SHOW_DASH and barstate.islast
+    color hdr = color.rgb(35, 35, 35)
+    color bg1 = color.rgb(245, 245, 245)
+    color bg2 = color.rgb(230, 230, 230)
+    color txt = color.black
+    color inv = color.white
+
+    table.clear(dash, 0, 0, 3, 11)
+
+    table.cell(dash, 0, 0, "XAC v2 α1.1", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 0, "A4", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 0, "Closed", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 0, str.tostring(strategy.closedtrades), text_color = inv, bgcolor = hdr)
+
+    table.cell(dash, 0, 1, "PF", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 1, str.tostring(f_pf(), "#.###"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 1, "Pos", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 1, str.tostring(strategy.position_size), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 2, "30m closed", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 2, str.tostring(c30Closed), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 2, "CRT", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 2, str.tostring(cCrt), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 3, "Attached", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 3, str.tostring(cAttached), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 3, "Sweep10-19", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 3, str.tostring(cSweep), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 4, "Recovery60", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 4, str.tostring(cRecovery), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 4, "Time", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 4, str.tostring(cTime), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 5, "Qualified", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 5, str.tostring(cA4Qualified), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 5, "L/S", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 5, str.tostring(cLongQualified)+"/"+str.tostring(cShortQualified), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 6, "Cancel near", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 6, str.tostring(cCancelledNear), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 6, "Cancel SL", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 6, str.tostring(cCancelledStop), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 7, "HH/LL", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 7, str.tostring(cConfirm), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 7, "Orders", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 7, str.tostring(cOrders), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 8, "Fills", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 8, str.tostring(cFills), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 8, "Closed QA", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 8, str.tostring(cClosed), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 9, "Pending", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 9, a4Pending ? "YES" : "NO", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 9, "Dir", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 9, str.tostring(a4Dir), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 10, "Near/Far", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 10, str.tostring(a4Near, "#.##"), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 10, "Far", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 10, str.tostring(a4Far, "#.##"), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 11, "STATUS", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 11, "REBUILD", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 11, "Stage", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 11, "A4 ONLY", text_color = inv, bgcolor = hdr)
