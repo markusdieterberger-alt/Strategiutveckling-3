@@ -1,0 +1,497 @@
+//@version=6
+strategy(
+     "XAC v2.0-alpha4 — REBUILD POC",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = false,
+     calc_on_order_fills = false,
+     calc_on_every_tick = false,
+     initial_capital = 25000,
+     margin_long = 0,
+     margin_short = 0,
+     commission_type = strategy.commission.cash_per_contract,
+     commission_value = 0.50,
+     slippage = 1
+)
+
+// ============================================================================
+// XAC v2.0-alpha4 — CLEAN REBUILD / POC ONLY
+//
+// Frozen preserved source behavior:
+// - 500x1m profile.
+// - Profile frozen at START of each 15m bar using only completed 1m bars.
+// - 80 bins default, equal allocation of each 1m bar volume across touched bins.
+// - POC = center of max-volume bin.
+// - Completed 15m ATR14 = simple rolling mean of TR.
+// - EMA50 = recursive EMA equivalent to pandas ewm(span=50, adjust=False).
+// - Slope50 = current EMA50 minus EMA50 four completed 15m bars earlier.
+// - FIRST raw POC-magnet candidate/day is frozen BEFORE trend filter.
+// - Magnet distance = 0.5..2.0 * ATR15.
+// - Direction points from 15m close toward POC.
+// - Trend filter: long requires positive EMA50 slope; short negative.
+// - Target = frozen POC.
+// - Intended source stop = 1.5x actual next-open -> POC distance.
+// - Risk = $120, max 20 MNQ.
+//
+// Pine limitation exposed explicitly:
+// qty is chosen when order is submitted at 15m close, before next 1m open is
+// known. alpha4 uses signal-close geometry for provisional sizing, then arms
+// the stop from ACTUAL filled average price once the position is observable.
+// Dashboard tracks entry drift so this mismatch is visible instead of hidden.
+// ============================================================================
+
+string TZ = "Europe/Stockholm"
+float TICK = syminfo.mintick
+float MNQ_POINT_VALUE = 2.0
+
+string G0 = "00 — Rebuild"
+bool USE_POC = input.bool(true, "POC enabled", group = G0)
+bool SHOW_MARKS = input.bool(true, "Show explicit QA marks", group = G0)
+bool SHOW_LEVELS = input.bool(true, "Show frozen POC", group = G0)
+bool SHOW_DASH = input.bool(true, "Show mobile dashboard", group = G0)
+
+string G1 = "01 — POC frozen"
+int POC_BINS = input.int(80, "POC bins", minval = 40, maxval = 120, group = G1)
+int POC_LOOKBACK = input.int(500, "POC 1m lookback", minval = 100, maxval = 1000, group = G1)
+float RISK_POC_USD = input.float(120.0, "POC risk USD", step = 10, group = G1)
+int MAX_MNQ = input.int(20, "Max MNQ", minval = 1, maxval = 20, group = G1)
+int FLAT_HOUR_STHLM = input.int(22, "Flat hour Stockholm", minval = 0, maxval = 23, group = G1)
+
+if barstate.isfirst
+    if not chart.is_standard
+        runtime.error("Use standard candles.")
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("Use MNQ 1-minute chart.")
+
+f_qty(float entryPx, float stopPx, float riskUsd) =>
+    float riskPts = math.abs(entryPx - stopPx)
+    float usdPerContract = riskPts * MNQ_POINT_VALUE
+    int q = usdPerContract > 0 ? int(math.floor(riskUsd / usdPerContract)) : 0
+    math.max(0, math.min(MAX_MNQ, q))
+
+f_pf() =>
+    float gl = math.abs(strategy.grossloss)
+    gl > 0 ? strategy.grossprofit / gl : na
+
+bool isNewDay = dayofmonth(time, TZ) != dayofmonth(time[1], TZ)
+
+// ============================================================================
+// 1m rolling profile source
+// ============================================================================
+
+var array<float> pocH = array.new_float()
+var array<float> pocL = array.new_float()
+var array<float> pocV = array.new_float()
+
+var float frozenPOC = na
+
+bool start15 = minute(time, TZ) % 15 == 0
+bool end15 = minute(time, TZ) % 15 == 14
+
+if start15
+    frozenPOC := na
+
+    if array.size(pocH) >= POC_LOOKBACK
+        float plo = array.min(pocL)
+        float phi = array.max(pocH)
+        float span = phi - plo
+
+        if span > TICK
+            float bw = span / POC_BINS
+            array<float> hist = array.new_float(POC_BINS, 0.0)
+            int first = array.size(pocH) - POC_LOOKBACK
+
+            for k = first to array.size(pocH) - 1
+                float bh = array.get(pocH, k)
+                float bl = array.get(pocL, k)
+                float bv = array.get(pocV, k)
+
+                int i0 = int(math.max(0, math.min(POC_BINS - 1, math.floor((bl - plo) / bw))))
+                int i1 = int(math.max(0, math.min(POC_BINS - 1, math.floor((bh - plo) / bw))))
+                int cnt = math.max(1, i1 - i0 + 1)
+
+                for z = i0 to i1
+                    array.set(hist, z, array.get(hist, z) + bv / cnt)
+
+            int pi = array.indexof(hist, array.max(hist))
+            frozenPOC := plo + (pi + 0.5) * bw
+
+// ============================================================================
+// 15m state
+// ============================================================================
+
+var float o15 = na
+var float h15 = na
+var float l15 = na
+var float c15 = na
+var float v15 = 0.0
+
+var array<float> trHist = array.new_float()
+var array<float> emaHist = array.new_float()
+var float ema50_15 = na
+var float prev15Close = na
+
+if start15 or na(o15)
+    o15 := open
+    h15 := high
+    l15 := low
+    c15 := close
+    v15 := volume
+else
+    h15 := math.max(h15, high)
+    l15 := math.min(l15, low)
+    c15 := close
+    v15 += volume
+
+// ============================================================================
+// Daily candidate state + QA counters
+// ============================================================================
+
+var bool candidateSeenToday = false
+
+var int cDays = 0
+var int cProfiles = 0
+var int cAtrReady = 0
+var int cMagnetRaw = 0
+var int cCandidate = 0
+var int cLongCandidate = 0
+var int cShortCandidate = 0
+var int cTrendPass = 0
+var int cQtyZero = 0
+var int cOrders = 0
+var int cPosFills = 0
+var int cPosCloses = 0
+var int cLedgerClosed = 0
+var int cInvisibleRT = 0
+var int cFillDrift = 0
+
+if barstate.isfirst
+    cDays := 1
+
+if isNewDay
+    cDays += 1
+    candidateSeenToday := false
+
+bool qaCandidateLong = false
+bool qaCandidateShort = false
+bool qaOrderLong = false
+bool qaOrderShort = false
+
+// Pending execution state.
+var int pendingDir = 0
+var float pendingPOC = na
+var float signalClosePx = na
+var float provisionalStop = na
+
+if end15
+    float tr15 = na(prev15Close) ? h15 - l15 : math.max(h15 - l15, math.max(math.abs(h15 - prev15Close), math.abs(l15 - prev15Close)))
+
+    array.push(trHist, tr15)
+    if array.size(trHist) > 14
+        array.shift(trHist)
+
+    float atr15 = array.size(trHist) == 14 ? array.avg(trHist) : na
+
+    ema50_15 := na(ema50_15) ? c15 : ema50_15 + (2.0 / 51.0) * (c15 - ema50_15)
+
+    array.push(emaHist, ema50_15)
+    if array.size(emaHist) > 5
+        array.shift(emaHist)
+
+    float slope50 = array.size(emaHist) >= 5 ? array.get(emaHist, array.size(emaHist) - 1) - array.get(emaHist, array.size(emaHist) - 5) : na
+
+    prev15Close := c15
+
+    if not na(frozenPOC)
+        cProfiles += 1
+    if not na(atr15)
+        cAtrReady += 1
+
+    int sigHour = hour(time, TZ)
+
+    if USE_POC and not candidateSeenToday and sigHour >= 1 and sigHour < FLAT_HOUR_STHLM and not na(frozenPOC) and not na(atr15)
+        float dist = math.abs(c15 - frozenPOC)
+        bool magnet = dist >= 0.5 * atr15 and dist <= 2.0 * atr15
+
+        if magnet
+            cMagnetRaw += 1
+            candidateSeenToday := true
+            cCandidate += 1
+
+            int dir = c15 < frozenPOC ? 1 : -1
+            if dir == 1
+                cLongCandidate += 1
+                qaCandidateLong := true
+            else
+                cShortCandidate += 1
+                qaCandidateShort := true
+
+            bool trendOK = not na(slope50) and ((dir == 1 and slope50 > 0) or (dir == -1 and slope50 < 0))
+
+            if trendOK and strategy.position_size == 0
+                cTrendPass += 1
+
+                // Provisional sizing uses signal-close geometry because next open
+                // is not yet knowable when the market order is submitted.
+                float pd = math.abs(frozenPOC - close)
+
+                if pd > TICK and dir * (frozenPOC - close) > 0
+                    float stopAtSignalGeometry = close - dir * 1.5 * pd
+                    int qty = f_qty(close, stopAtSignalGeometry, RISK_POC_USD)
+
+                    if qty > 0
+                        pendingDir := dir
+                        pendingPOC := frozenPOC
+                        signalClosePx := close
+                        provisionalStop := stopAtSignalGeometry
+
+                        if dir == 1
+                            strategy.entry("POC-L", strategy.long, qty = qty, comment = "POC")
+                            qaOrderLong := true
+                        else
+                            strategy.entry("POC-S", strategy.short, qty = qty, comment = "POC")
+                            qaOrderShort := true
+
+                        cOrders += 1
+                    else
+                        cQtyZero += 1
+
+// ============================================================================
+// Actual fill geometry + exits
+// ============================================================================
+
+bool justOpened = strategy.position_size != 0 and strategy.position_size[1] == 0
+bool justClosedByPos = strategy.position_size == 0 and strategy.position_size[1] != 0
+bool fillLong = justOpened and strategy.position_size > 0
+bool fillShort = justOpened and strategy.position_size < 0
+
+var float activeStop = na
+var float activeTarget = na
+
+if justOpened
+    cPosFills += 1
+
+    float fillPx = strategy.position_avg_price
+    activeTarget := pendingPOC
+
+    // Intended source geometry from ACTUAL fill to POC.
+    float actualDist = math.abs(activeTarget - fillPx)
+    activeStop := fillPx - pendingDir * 1.5 * actualDist
+
+    if math.abs(fillPx - signalClosePx) >= TICK
+        cFillDrift += 1
+
+    if pendingDir == 1
+        strategy.exit("POC-L-X", "POC-L", stop = activeStop, limit = activeTarget)
+    else
+        strategy.exit("POC-S-X", "POC-S", stop = activeStop, limit = activeTarget)
+
+if strategy.position_size > 0 and not na(activeStop) and not na(activeTarget)
+    strategy.exit("POC-L-X", "POC-L", stop = activeStop, limit = activeTarget)
+
+if strategy.position_size < 0 and not na(activeStop) and not na(activeTarget)
+    strategy.exit("POC-S-X", "POC-S", stop = activeStop, limit = activeTarget)
+
+if justClosedByPos
+    cPosCloses += 1
+    activeStop := na
+    activeTarget := na
+    pendingDir := 0
+    pendingPOC := na
+    signalClosePx := na
+    provisionalStop := na
+
+var int prevClosedTrades = 0
+int closedDelta = strategy.closedtrades - prevClosedTrades
+bool closedByLedger = closedDelta > 0
+
+if closedByLedger
+    cLedgerClosed += closedDelta
+
+    if not justOpened and strategy.position_size == 0 and strategy.position_size[1] == 0
+        cInvisibleRT += closedDelta
+
+prevClosedTrades := strategy.closedtrades
+
+if hour(time, TZ) == FLAT_HOUR_STHLM and minute(time, TZ) == 0
+    strategy.close_all(comment = "XAC FLAT")
+
+// ============================================================================
+// Maintain rolling 1m source AFTER all start/signal computations.
+// ============================================================================
+
+array.push(pocH, high)
+array.push(pocL, low)
+array.push(pocV, volume)
+
+if array.size(pocH) > POC_LOOKBACK
+    array.shift(pocH)
+    array.shift(pocL)
+    array.shift(pocV)
+
+// ============================================================================
+// Explicit mobile marks
+// ============================================================================
+
+plotshape(
+     SHOW_MARKS and qaCandidateLong,
+     title = "POC LONG CANDIDATE",
+     style = shape.triangleup,
+     location = location.belowbar,
+     text = "POC?",
+     textcolor = color.white,
+     color = color.new(color.green, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaCandidateShort,
+     title = "POC SHORT CANDIDATE",
+     style = shape.triangledown,
+     location = location.abovebar,
+     text = "POC?",
+     textcolor = color.white,
+     color = color.new(color.red, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderLong,
+     title = "POC LONG ORDER",
+     style = shape.circle,
+     location = location.belowbar,
+     text = "O",
+     textcolor = color.white,
+     color = color.green,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderShort,
+     title = "POC SHORT ORDER",
+     style = shape.circle,
+     location = location.abovebar,
+     text = "O",
+     textcolor = color.white,
+     color = color.red,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and fillLong,
+     title = "POC LONG FILL",
+     style = shape.labelup,
+     location = location.belowbar,
+     text = "POC L",
+     textcolor = color.white,
+     color = color.green,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and fillShort,
+     title = "POC SHORT FILL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     text = "POC S",
+     textcolor = color.white,
+     color = color.red,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and closedByLedger,
+     title = "POC EXIT",
+     style = shape.xcross,
+     location = location.abovebar,
+     text = "X",
+     color = color.black,
+     size = size.small
+)
+
+plot(SHOW_LEVELS ? frozenPOC : na, "Frozen POC", color = color.new(color.orange, 20), style = plot.style_stepline)
+
+// ============================================================================
+// Mobile dashboard
+// ============================================================================
+
+var table dash = table.new(position.top_right, 4, 14, border_width = 1)
+
+if SHOW_DASH and barstate.islast
+    color hdr = color.rgb(35, 35, 35)
+    color bg1 = color.rgb(245, 245, 245)
+    color bg2 = color.rgb(230, 230, 230)
+    color txt = color.black
+    color inv = color.white
+
+    table.clear(dash, 0, 0, 3, 13)
+
+    table.cell(dash, 0, 0, "XAC v2 α4", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 0, "POC", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 0, "Closed", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 0, str.tostring(strategy.closedtrades), text_color = inv, bgcolor = hdr)
+
+    table.cell(dash, 0, 1, "PF", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 1, str.tostring(f_pf(), "#.###"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 1, "Pos", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 1, str.tostring(strategy.position_size), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 2, "Days", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 2, str.tostring(cDays), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 2, "Profiles", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 2, str.tostring(cProfiles), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 3, "ATR ready", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 3, str.tostring(cAtrReady), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 3, "Magnet raw", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 3, str.tostring(cMagnetRaw), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 4, "Candidate", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 4, str.tostring(cCandidate), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 4, "L/S", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 4, str.tostring(cLongCandidate)+"/"+str.tostring(cShortCandidate), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 5, "Trend pass", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 5, str.tostring(cTrendPass), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 5, "Orders", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 5, str.tostring(cOrders), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 6, "Pos fills", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 6, str.tostring(cPosFills), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 6, "Ledger closed", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 6, str.tostring(cLedgerClosed), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 7, "Invisible RT", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 7, str.tostring(cInvisibleRT), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 7, "Qty0", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 7, str.tostring(cQtyZero), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 8, "Fill drift>=tick", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 8, str.tostring(cFillDrift), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 8, "Seen today", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 8, candidateSeenToday ? "YES" : "NO", text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 9, "Frozen POC", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 9, str.tostring(frozenPOC, "#.##"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 9, "EMA50", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 9, str.tostring(ema50_15, "#.##"), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 10, "Signal close", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 10, str.tostring(signalClosePx, "#.##"), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 10, "Prov stop", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 10, str.tostring(provisionalStop, "#.##"), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 11, "Active stop", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 11, str.tostring(activeStop, "#.##"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 11, "Target", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 11, str.tostring(activeTarget, "#.##"), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 12, "Risk", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 12, "$"+str.tostring(RISK_POC_USD, "#"), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 12, "Lookback", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 12, str.tostring(POC_LOOKBACK), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 13, "STATUS", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 13, "REBUILD", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 13, "Stage", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 13, "POC ONLY", text_color = inv, bgcolor = hdr)
