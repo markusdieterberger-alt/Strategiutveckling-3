@@ -57,7 +57,7 @@ class PreAttached:
 
 
 def test_oracle_j_bracket_before_fill_same_bar():
-    s = run(PreAttached(), [b(0,100,101,99,100), b(1,100,101,97,99)])
+    s = run(PreAttached(), [b(0,100,101,99,100), b(1,100,101,95,99)])
     assert len(s.closed_trades) == 1
     assert s.closed_trades[0].entry_id == "J"
     assert s.closed_trades[0].exit_id == "J-X"
@@ -73,7 +73,7 @@ class PathTarget:
 
 def test_oracle_k_target_wins_after_limit_entry():
     # O-L-H-C; limit entry on down leg, target on subsequent up leg.
-    s = run(PathTarget(), [b(0,100,100,100,100), b(1,100,101,99,100)])
+    s = run(PathTarget(), [b(0,100,100,100,100), b(1,100,101,99.5,100)])
     assert len(s.closed_trades) == 1
     assert s.closed_trades[0].exit_price == 100.25
 
