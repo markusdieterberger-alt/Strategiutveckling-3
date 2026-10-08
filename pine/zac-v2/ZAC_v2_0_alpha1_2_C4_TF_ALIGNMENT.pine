@@ -1,0 +1,1023 @@
+//@version=6
+strategy(
+     "ZAC v2.0-alpha1.2 — C4 CLEAN REBUILD TF ALIGN",
+     overlay = true,
+     pyramiding = 0,
+     process_orders_on_close = false,
+     calc_on_order_fills = false,
+     calc_on_every_tick = false,
+     initial_capital = 25000,
+     margin_long = 0,
+     margin_short = 0,
+     max_bars_back = 5000,
+     commission_type = strategy.commission.cash_per_contract,
+     commission_value = 0.50,
+     slippage = 1
+)
+
+// ============================================================================
+// ZAC v2.0-alpha1.2 — C4 CLEAN REBUILD TF ALIGN
+// Project: Strategiutveckling
+//
+// PURPOSE
+// -------
+// First clean Pine port of frozen ZAC C4 lineage.
+// Built from source/spec + known Python→Pine failure modes.
+// NOT a parity PASS. NOT funded/live approved.
+//
+// CANONICAL C4 FINGERPRINT (diagnostic only)
+// ------------------------------------------
+// ALL 2019–2026: ~376 trades, PF ~2.04, Exp ~+0.53R, DD ~25.47R
+// 2025–26: n105, PF ~2.83, Exp ~+0.75R, DD ~4.76R
+// Year counts 2019..2026: 28 / 49 / 51 / 34 / 61 / 48 / 71 / 34
+//
+// FROZEN CORE
+// -----------
+// - DS180: 180 completed 1m bars, 60 bins, VA70%, freeze every 5m.
+// - Balance: comp<=1.0, efficiency<=0.35, inside>=0.65.
+// - REJ only.
+// - C4 session 07:00–14:29 America/Chicago.
+// - Untouched causal 1H/4H FVG in trade direction, <=8 ATR.
+// - Displacement >=0.10 ATR.
+// - Latest completed 5m RelVol20 >=1.0.
+// - Resting limit at frozen VA edge, max 10m.
+// - Wrong-side close >1 tick before fill invalidates.
+// - Structural stop 1 tick behind rejection wick.
+// - Structural risk >=0.25 ATR.
+// - TP fixed 2R only if FVG lies beyond TP.
+// - Max hold 120m.
+//
+// IMPORTANT PARITY DESIGN
+// -----------------------
+// 1) Raw synthetic price geometry is NOT tick-rounded.
+// 2) Executable order prices are normalized separately.
+// 3) 5m RelVol is built manually from completed 5m bars.
+// 4) 1H/4H FVG state is built manually from completed HTF bars.
+// 5) strategy.closedtrades delta is tracked beside position_size.
+// 6) Same-bar round trips are explicitly counted.
+// 7) Both displacement interpretations are counted:
+//      BODY = abs(close-open) >= 0.10 ATR
+//      EDGE = distance from frozen VA edge >= 0.10 ATR
+//    Execution defaults to BODY_SOURCE based on latest C4 static source audit.
+// 8) FVG source semantic is LOCATION AHEAD, not formation polarity:
+//      long -> nearest untouched 1H/4H FVG above price
+//      short -> nearest untouched 1H/4H FVG below price
+//    SAME_TYPE remains diagnostic only.
+// 9) Pending fill-bar policy is explicit:
+//      broker-emulator fill has priority over retrospective close invalidation
+//      on a bar that actually touches the resting limit.
+// ============================================================================
+
+// ============================================================================
+// SETTINGS
+// ============================================================================
+
+string G0 = "00 — C4 rebuild"
+bool USE_C4 = input.bool(true, "C4 enabled", group = G0)
+string DISP_MODE = input.string(
+     "BODY_SOURCE",
+     "Displacement semantic",
+     options = ["BODY_SOURCE", "EDGE_LEGACY"],
+     group = G0,
+     tooltip = "Source audit currently favors BODY >=0.10 ATR. EDGE is retained only as parity diagnostic."
+)
+string FVG_MODE = input.string(
+     "LOCATION_AHEAD_SOURCE",
+     "FVG semantic",
+     options = ["LOCATION_AHEAD_SOURCE", "SAME_TYPE_DIAGNOSTIC"],
+     group = G0,
+     tooltip = "Source interpretation: 'in trade direction' means an untouched FVG located ahead of price in the trade direction. FVG formation polarity is diagnostic only."
+)
+
+string G1 = "01 — Frozen C4"
+float C4_RISK_USD = input.float(350.0, "Nominal risk USD", step = 25, group = G1)
+int MAX_MNQ = input.int(20, "Max MNQ", minval = 1, maxval = 20, group = G1)
+int RETEST_MAX_MIN = input.int(10, "Pending limit max minutes", minval = 1, maxval = 20, group = G1)
+int MAX_HOLD_MIN = input.int(120, "Max hold minutes", minval = 1, maxval = 240, group = G1)
+
+string G2 = "02 — Display"
+bool SHOW_LEVELS = input.bool(false, "Show frozen VA / FVG target", group = G2)
+bool SHOW_MARKS = input.bool(true, "Show explicit QA marks", group = G2)
+bool SHOW_DASH = input.bool(true, "Show mobile dashboard", group = G2)
+
+// ============================================================================
+// CONSTANTS / GUARDS
+// ============================================================================
+
+string TZ_CT = "America/Chicago"
+float TICK = syminfo.mintick
+float MNQ_POINT_VALUE = 2.0
+
+int VP_N = 180
+int VP_BINS = 60
+float VP_VA = 0.70
+
+float C4_DISP_ATR = 0.10
+float C4_MAX_FVG_ATR = 8.0
+float C4_REL5_MIN = 1.0
+float C4_MIN_RISK_ATR = 0.25
+float C4_RR = 2.0
+
+if barstate.isfirst
+    if not chart.is_standard
+        runtime.error("ZAC C4 requires standard candles.")
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("ZAC C4 requires a 1-minute chart.")
+
+// ============================================================================
+// HELPERS
+// ============================================================================
+
+f_round_tick(float px) =>
+    math.round(px / TICK) * TICK
+
+f_qty(float entryPx, float stopPx, float riskUsd) =>
+    float riskPts = math.abs(entryPx - stopPx)
+    float usdPerContract = riskPts * MNQ_POINT_VALUE
+    int q = usdPerContract > 0 ? int(math.floor(riskUsd / usdPerContract)) : 0
+    math.max(0, math.min(MAX_MNQ, q))
+
+f_pf() =>
+    float gl = math.abs(strategy.grossloss)
+    gl > 0 ? strategy.grossprofit / gl : na
+
+f_yesno(bool x) =>
+    x ? "YES" : "NO"
+
+// ============================================================================
+// DS180 PROFILE
+// Exact preserved profile mechanics from VP_DS180 canonical helper:
+// - 180 completed 1m bars immediately preceding freeze bar.
+// - 60 bins.
+// - equal volume allocation over all bins touched by each bar.
+// - POC tie: first max bin.
+// - VA expansion: right only when right > left, otherwise left.
+// ============================================================================
+
+f_ds180() =>
+    float profLow = 1e20
+    float profHigh = -1e20
+    float trSum = 0.0
+    float previousClose = na
+
+    // Oldest -> newest completed bar.
+    for step = 0 to VP_N - 1
+        int j = VP_N - step
+        profLow := math.min(profLow, low[j])
+        profHigh := math.max(profHigh, high[j])
+
+        float tr = high[j] - low[j]
+        if not na(previousClose)
+            tr := math.max(tr, math.max(math.abs(high[j] - previousClose), math.abs(low[j] - previousClose)))
+
+        trSum += tr
+        previousClose := close[j]
+
+    float span = profHigh - profLow
+    float binWidth = span / VP_BINS
+    array<float> hist = array.new_float(VP_BINS, 0.0)
+
+    if span > 0 and binWidth > 0
+        for j = 1 to VP_N
+            int i0 = int(math.floor((low[j] - profLow) / binWidth))
+            int i1 = int(math.floor((high[j] - profLow) / binWidth))
+
+            i0 := math.max(0, math.min(VP_BINS - 1, i0))
+            i1 := math.max(0, math.min(VP_BINS - 1, i1))
+
+            if i1 < i0
+                int tmp = i0
+                i0 := i1
+                i1 := tmp
+
+            int cnt = math.max(1, i1 - i0 + 1)
+            float addVol = volume[j] / cnt
+
+            for k = i0 to i1
+                array.set(hist, k, array.get(hist, k) + addVol)
+
+    float total = 0.0
+    float maxVol = -1.0
+    int pocBin = 0
+
+    for k = 0 to VP_BINS - 1
+        float v = array.get(hist, k)
+        total += v
+        if v > maxVol
+            maxVol := v
+            pocBin := k
+
+    int vaLoBin = pocBin
+    int vaHiBin = pocBin
+    float covered = total > 0 ? array.get(hist, pocBin) : 0.0
+    float targetVol = total * VP_VA
+
+    while covered < targetVol and (vaLoBin > 0 or vaHiBin < VP_BINS - 1)
+        float leftVol = vaLoBin > 0 ? array.get(hist, vaLoBin - 1) : -1.0
+        float rightVol = vaHiBin < VP_BINS - 1 ? array.get(hist, vaHiBin + 1) : -1.0
+
+        if rightVol > leftVol
+            vaHiBin += 1
+            covered += rightVol
+        else
+            vaLoBin -= 1
+            covered += leftVol
+
+    float rawVAL = profLow + vaLoBin * binWidth
+    float rawVAH = profLow + (vaHiBin + 1) * binWidth
+    float rawPOC = profLow + (pocBin + 0.5) * binWidth
+
+    float avgTR = trSum / VP_N
+    float comp = span / (avgTR * math.sqrt(VP_N) + 1e-12)
+    float eff = math.abs(close[1] - open[VP_N]) / (span + 1e-12)
+
+    int insideCount = 0
+    for j = 1 to VP_N
+        if close[j] >= rawVAL and close[j] <= rawVAH
+            insideCount += 1
+
+    float inside = float(insideCount) / VP_N
+
+    [rawVAH, rawVAL, rawPOC, comp, eff, inside]
+
+// Freeze exactly at each Chicago 5m boundary using only prior completed 1m bars.
+int ctMin = hour(time, TZ_CT) * 60 + minute(time, TZ_CT)
+bool fiveBoundary = ctMin % 5 == 0
+
+var float frVAH = na
+var float frVAL = na
+var float frPOC = na
+var float frComp = na
+var float frEff = na
+var float frInside = na
+
+var int cProfileFreeze = 0
+var int cBalancedFreeze = 0
+
+if fiveBoundary and bar_index > VP_N + 5
+    [aVAH, aVAL, aPOC, aComp, aEff, aInside] = f_ds180()
+    frVAH := aVAH
+    frVAL := aVAL
+    frPOC := aPOC
+    frComp := aComp
+    frEff := aEff
+    frInside := aInside
+
+    cProfileFreeze += 1
+    if aComp <= 1.0 and aEff <= 0.35 and aInside >= 0.65
+        cBalancedFreeze += 1
+
+bool balanced = not na(frVAH) and frComp <= 1.0 and frEff <= 0.35 and frInside >= 0.65
+
+// ============================================================================
+// MANUAL COMPLETED 5m RELVOL20
+// TradingView timeframe boundary alignment is taken from time("5"), not epoch
+// arithmetic. This preserves chart/exchange session alignment.
+// Numerator = just-completed 5m volume.
+// Denominator = 20 completed 5m volumes BEFORE numerator.
+// ============================================================================
+
+var float agg5Vol = 0.0
+var int agg5Key = na
+var array<float> prior5Vols = array.new_float()
+var float rel5 = na
+var int c5Completed = 0
+
+int key5 = time("5")
+
+if na(agg5Key)
+    agg5Key := key5
+    agg5Vol := volume
+else if key5 != agg5Key
+    float completed5Vol = agg5Vol
+
+    if array.size(prior5Vols) >= 20
+        float sum20 = 0.0
+        int n5 = array.size(prior5Vols)
+        for i = n5 - 20 to n5 - 1
+            sum20 += array.get(prior5Vols, i)
+        float mean20 = sum20 / 20.0
+        rel5 := mean20 > 0 ? completed5Vol / mean20 : na
+
+    array.push(prior5Vols, completed5Vol)
+    if array.size(prior5Vols) > 40
+        array.shift(prior5Vols)
+
+    c5Completed += 1
+    agg5Key := key5
+    agg5Vol := volume
+else
+    agg5Vol += volume
+
+// ============================================================================
+// MANUAL HTF AGGREGATION FOR 1H / 4H FVGs
+// Completed-bar state only.
+// IMPORTANT: boundaries use time("60") / time("240") so our hand-built bars
+// inherit TradingView's exchange/session alignment instead of UTC epoch blocks.
+// FVG formation:
+// bull: just-completed low > two-completed-bars-ago high
+// bear: just-completed high < two-completed-bars-ago low
+// ============================================================================
+
+var array<float> fvg1Lo = array.new_float()
+var array<float> fvg1Hi = array.new_float()
+var array<int> fvg1Dir = array.new_int()
+var array<int> fvg1Born = array.new_int()
+
+var array<float> fvg4Lo = array.new_float()
+var array<float> fvg4Hi = array.new_float()
+var array<int> fvg4Dir = array.new_int()
+var array<int> fvg4Born = array.new_int()
+
+var int c1CreateBull = 0
+var int c1CreateBear = 0
+var int c4CreateBull = 0
+var int c4CreateBear = 0
+var int c1PruneBull = 0
+var int c1PruneBear = 0
+var int c4PruneBull = 0
+var int c4PruneBear = 0
+var int cFirstBarTouches = 0
+
+// 1H current aggregator and completed history.
+var int h1Key = na
+var float h1O = na
+var float h1H = na
+var float h1L = na
+var float h1C = na
+var float h1Prev1H = na
+var float h1Prev1L = na
+var float h1Prev2H = na
+var float h1Prev2L = na
+
+int key1h = time("60")
+
+if na(h1Key)
+    h1Key := key1h
+    h1O := open
+    h1H := high
+    h1L := low
+    h1C := close
+else if key1h != h1Key
+    float doneH = h1H
+    float doneL = h1L
+
+    if not na(h1Prev2H)
+        if doneL > h1Prev2H
+            array.push(fvg1Lo, h1Prev2H)
+            array.push(fvg1Hi, doneL)
+            array.push(fvg1Dir, 1)
+            array.push(fvg1Born, bar_index)
+            c1CreateBull += 1
+
+        if doneH < h1Prev2L
+            array.push(fvg1Lo, doneH)
+            array.push(fvg1Hi, h1Prev2L)
+            array.push(fvg1Dir, -1)
+            array.push(fvg1Born, bar_index)
+            c1CreateBear += 1
+
+    h1Prev2H := h1Prev1H
+    h1Prev2L := h1Prev1L
+    h1Prev1H := doneH
+    h1Prev1L := doneL
+
+    h1Key := key1h
+    h1O := open
+    h1H := high
+    h1L := low
+    h1C := close
+else
+    h1H := math.max(h1H, high)
+    h1L := math.min(h1L, low)
+    h1C := close
+
+// 4H current aggregator and completed history.
+var int h4Key = na
+var float h4O = na
+var float h4H = na
+var float h4L = na
+var float h4C = na
+var float h4Prev1H = na
+var float h4Prev1L = na
+var float h4Prev2H = na
+var float h4Prev2L = na
+
+int key4h = time("240")
+
+if na(h4Key)
+    h4Key := key4h
+    h4O := open
+    h4H := high
+    h4L := low
+    h4C := close
+else if key4h != h4Key
+    float doneH = h4H
+    float doneL = h4L
+
+    if not na(h4Prev2H)
+        if doneL > h4Prev2H
+            array.push(fvg4Lo, h4Prev2H)
+            array.push(fvg4Hi, doneL)
+            array.push(fvg4Dir, 1)
+            array.push(fvg4Born, bar_index)
+            c4CreateBull += 1
+
+        if doneH < h4Prev2L
+            array.push(fvg4Lo, doneH)
+            array.push(fvg4Hi, h4Prev2L)
+            array.push(fvg4Dir, -1)
+            array.push(fvg4Born, bar_index)
+            c4CreateBear += 1
+
+    h4Prev2H := h4Prev1H
+    h4Prev2L := h4Prev1L
+    h4Prev1H := doneH
+    h4Prev1L := doneL
+
+    h4Key := key4h
+    h4O := open
+    h4H := high
+    h4L := low
+    h4C := close
+else
+    h4H := math.max(h4H, high)
+    h4L := math.min(h4L, low)
+    h4C := close
+
+// Prune only by TRUE interval overlap.
+// Newly-created FVGs are already causally known at this bar's open.
+// A touch during this first-valid 1m bar is therefore allowed to prune.
+int n1p = array.size(fvg1Lo)
+if n1p > 0
+    int i = n1p - 1
+    while i >= 0
+        float zLo = array.get(fvg1Lo, i)
+        float zHi = array.get(fvg1Hi, i)
+        int zDir = array.get(fvg1Dir, i)
+        int born = array.get(fvg1Born, i)
+        bool overlap = high >= zLo and low <= zHi
+
+        if overlap
+            if born == bar_index
+                cFirstBarTouches += 1
+
+            if zDir == 1
+                c1PruneBull += 1
+            else
+                c1PruneBear += 1
+
+            array.remove(fvg1Lo, i)
+            array.remove(fvg1Hi, i)
+            array.remove(fvg1Dir, i)
+            array.remove(fvg1Born, i)
+
+        i -= 1
+
+int n4p = array.size(fvg4Lo)
+if n4p > 0
+    int i = n4p - 1
+    while i >= 0
+        float zLo = array.get(fvg4Lo, i)
+        float zHi = array.get(fvg4Hi, i)
+        int zDir = array.get(fvg4Dir, i)
+        int born = array.get(fvg4Born, i)
+        bool overlap = high >= zLo and low <= zHi
+
+        if overlap
+            if born == bar_index
+                cFirstBarTouches += 1
+
+            if zDir == 1
+                c4PruneBull += 1
+            else
+                c4PruneBear += 1
+
+            array.remove(fvg4Lo, i)
+            array.remove(fvg4Hi, i)
+            array.remove(fvg4Dir, i)
+            array.remove(fvg4Born, i)
+
+        i -= 1
+
+// ============================================================================
+// NEAREST FVG SELECTION
+// We calculate BOTH:
+// - SAME TYPE source semantic
+// - ANY AHEAD diagnostic
+// ============================================================================
+
+f_nearest_fvg(int tradeDir, bool sameTypeOnly) =>
+    float chosenEdge = na
+    float bestDist = 1e20
+    int chosenTf = 0
+    int chosenType = 0
+
+    int n1 = array.size(fvg1Lo)
+    if n1 > 0
+        for i = 0 to n1 - 1
+            float zLo = array.get(fvg1Lo, i)
+            float zHi = array.get(fvg1Hi, i)
+            int zDir = array.get(fvg1Dir, i)
+
+            bool typeOK = not sameTypeOnly or zDir == tradeDir
+
+            if typeOK
+                if tradeDir == 1 and zLo > close
+                    float d = zLo - close
+                    if d < bestDist
+                        bestDist := d
+                        chosenEdge := zLo
+                        chosenTf := 1
+                        chosenType := zDir
+
+                if tradeDir == -1 and zHi < close
+                    float d = close - zHi
+                    if d < bestDist
+                        bestDist := d
+                        chosenEdge := zHi
+                        chosenTf := 1
+                        chosenType := zDir
+
+    int n4 = array.size(fvg4Lo)
+    if n4 > 0
+        for i = 0 to n4 - 1
+            float zLo = array.get(fvg4Lo, i)
+            float zHi = array.get(fvg4Hi, i)
+            int zDir = array.get(fvg4Dir, i)
+
+            bool typeOK = not sameTypeOnly or zDir == tradeDir
+
+            if typeOK
+                if tradeDir == 1 and zLo > close
+                    float d = zLo - close
+                    if d < bestDist
+                        bestDist := d
+                        chosenEdge := zLo
+                        chosenTf := 4
+                        chosenType := zDir
+
+                if tradeDir == -1 and zHi < close
+                    float d = close - zHi
+                    if d < bestDist
+                        bestDist := d
+                        chosenEdge := zHi
+                        chosenTf := 4
+                        chosenType := zDir
+
+    [chosenEdge, bestDist, chosenTf, chosenType]
+
+// ============================================================================
+// C4 RAW SIGNAL + GATE FUNNEL
+// ============================================================================
+
+float atr1 = ta.atr(14)
+bool c4Session = ctMin >= 7 * 60 and ctMin <= 14 * 60 + 29
+
+bool rawLong = USE_C4 and c4Session and balanced and low <= frVAL and close > frVAL and close > open
+bool rawShort = USE_C4 and c4Session and balanced and high >= frVAH and close < frVAH and close < open
+
+bool bodyDispLong = rawLong and math.abs(close - open) >= C4_DISP_ATR * atr1
+bool bodyDispShort = rawShort and math.abs(close - open) >= C4_DISP_ATR * atr1
+
+bool edgeDispLong = rawLong and (close - frVAL) >= C4_DISP_ATR * atr1
+bool edgeDispShort = rawShort and (frVAH - close) >= C4_DISP_ATR * atr1
+
+bool execDispLong = DISP_MODE == "BODY_SOURCE" ? bodyDispLong : edgeDispLong
+bool execDispShort = DISP_MODE == "BODY_SOURCE" ? bodyDispShort : edgeDispShort
+
+[sameLongEdge, sameLongDist, sameLongTf, sameLongType] = f_nearest_fvg(1, true)
+[sameShortEdge, sameShortDist, sameShortTf, sameShortType] = f_nearest_fvg(-1, true)
+[anyLongEdge, anyLongDist, anyLongTf, anyLongType] = f_nearest_fvg(1, false)
+[anyShortEdge, anyShortDist, anyShortTf, anyShortType] = f_nearest_fvg(-1, false)
+
+float execLongFvg = FVG_MODE == "LOCATION_AHEAD_SOURCE" ? anyLongEdge : sameLongEdge
+float execShortFvg = FVG_MODE == "LOCATION_AHEAD_SOURCE" ? anyShortEdge : sameShortEdge
+float execLongFvgDist = FVG_MODE == "LOCATION_AHEAD_SOURCE" ? anyLongDist : sameLongDist
+float execShortFvgDist = FVG_MODE == "LOCATION_AHEAD_SOURCE" ? anyShortDist : sameShortDist
+
+bool sameFvgLong = execDispLong and not na(sameLongEdge)
+bool sameFvgShort = execDispShort and not na(sameShortEdge)
+bool anyFvgLong = execDispLong and not na(anyLongEdge)
+bool anyFvgShort = execDispShort and not na(anyShortEdge)
+bool execFvgLong = execDispLong and not na(execLongFvg)
+bool execFvgShort = execDispShort and not na(execShortFvg)
+
+bool distLong = execFvgLong and execLongFvgDist <= C4_MAX_FVG_ATR * atr1
+bool distShort = execFvgShort and execShortFvgDist <= C4_MAX_FVG_ATR * atr1
+
+bool relLong = distLong and not na(rel5) and rel5 >= C4_REL5_MIN
+bool relShort = distShort and not na(rel5) and rel5 >= C4_REL5_MIN
+
+float rawLongStop = low - TICK
+float rawShortStop = high + TICK
+
+float rawLongRisk = frVAL - rawLongStop
+float rawShortRisk = rawShortStop - frVAH
+
+bool riskLong = relLong and rawLongRisk >= C4_MIN_RISK_ATR * atr1
+bool riskShort = relShort and rawShortRisk >= C4_MIN_RISK_ATR * atr1
+
+float rawLongTarget = frVAL + C4_RR * rawLongRisk
+float rawShortTarget = frVAH - C4_RR * rawShortRisk
+
+bool roomLong = riskLong and rawLongTarget < execLongFvg
+bool roomShort = riskShort and rawShortTarget > execShortFvg
+
+// ============================================================================
+// COUNTERS
+// ============================================================================
+
+var int cRaw = 0
+var int cRawL = 0
+var int cRawS = 0
+var int cBodyDisp = 0
+var int cEdgeDisp = 0
+var int cExecDisp = 0
+var int cSameFvg = 0
+var int cAnyFvg = 0
+var int cExecFvg = 0
+var int cDist = 0
+var int cRel = 0
+var int cRisk = 0
+var int cRoom = 0
+var int cQty0 = 0
+var int cBlocked = 0
+var int cOrders = 0
+var int cInvalid = 0
+var int cExpired = 0
+var int cFillInvalidConflict = 0
+var int cVisibleFills = 0
+var int cVisibleCloses = 0
+var int cLedgerClosed = 0
+var int cInvisibleRT = 0
+var int cTimeExit = 0
+
+if rawLong or rawShort
+    cRaw += 1
+    if rawLong
+        cRawL += 1
+    else
+        cRawS += 1
+
+if bodyDispLong or bodyDispShort
+    cBodyDisp += 1
+
+if edgeDispLong or edgeDispShort
+    cEdgeDisp += 1
+
+if execDispLong or execDispShort
+    cExecDisp += 1
+
+if sameFvgLong or sameFvgShort
+    cSameFvg += 1
+
+if anyFvgLong or anyFvgShort
+    cAnyFvg += 1
+
+if execFvgLong or execFvgShort
+    cExecFvg += 1
+
+if distLong or distShort
+    cDist += 1
+
+if relLong or relShort
+    cRel += 1
+
+if riskLong or riskShort
+    cRisk += 1
+
+if roomLong or roomShort
+    cRoom += 1
+
+// ============================================================================
+// ORDER STATE
+// ============================================================================
+
+var bool pending = false
+var int pendingDir = 0
+var int pendingSignalBar = na
+var float pendingRawEntry = na
+var float pendingRawStop = na
+var float pendingRawTarget = na
+var float pendingExecEntry = na
+var float pendingExecStop = na
+var float pendingExecTarget = na
+var float pendingFvg = na
+var int activeEntryBar = na
+
+bool qaSignalLong = false
+bool qaSignalShort = false
+bool qaOrderLong = false
+bool qaOrderShort = false
+
+bool candidateLong = roomLong
+bool candidateShort = roomShort
+bool hasCandidate = candidateLong or candidateShort
+
+if hasCandidate and (pending or strategy.position_size != 0)
+    cBlocked += 1
+
+if hasCandidate and not pending and strategy.position_size == 0
+    int dir = candidateLong ? 1 : -1
+    float rEntry = dir == 1 ? frVAL : frVAH
+    float rStop = dir == 1 ? rawLongStop : rawShortStop
+    float rTarget = dir == 1 ? rawLongTarget : rawShortTarget
+    float fvgEdge = dir == 1 ? execLongFvg : execShortFvg
+
+    float xEntry = f_round_tick(rEntry)
+    float xStop = f_round_tick(rStop)
+    float xTarget = f_round_tick(rTarget)
+
+    int qty = f_qty(xEntry, xStop, C4_RISK_USD)
+
+    qaSignalLong := dir == 1
+    qaSignalShort := dir == -1
+
+    if qty <= 0
+        cQty0 += 1
+    else
+        pending := true
+        pendingDir := dir
+        pendingSignalBar := bar_index
+        pendingRawEntry := rEntry
+        pendingRawStop := rStop
+        pendingRawTarget := rTarget
+        pendingExecEntry := xEntry
+        pendingExecStop := xStop
+        pendingExecTarget := xTarget
+        pendingFvg := fvgEdge
+
+        if dir == 1
+            strategy.entry("C4-L", strategy.long, qty = qty, limit = xEntry, comment = "C4")
+            strategy.exit("C4-L-X", "C4-L", stop = xStop, limit = xTarget)
+            qaOrderLong := true
+        else
+            strategy.entry("C4-S", strategy.short, qty = qty, limit = xEntry, comment = "C4")
+            strategy.exit("C4-S-X", "C4-S", stop = xStop, limit = xTarget)
+            qaOrderShort := true
+
+        cOrders += 1
+
+// ============================================================================
+// LEDGER OBSERVABILITY
+// Must happen before pending cancellation so same-bar RT can clear state.
+// ============================================================================
+
+bool justOpened = strategy.position_size != 0 and strategy.position_size[1] == 0
+bool justClosedByPos = strategy.position_size == 0 and strategy.position_size[1] != 0
+
+var int prevClosedTrades = 0
+int closedDelta = strategy.closedtrades - prevClosedTrades
+bool closedByLedger = closedDelta > 0
+
+bool fillLong = justOpened and strategy.position_size > 0
+bool fillShort = justOpened and strategy.position_size < 0
+
+if justOpened
+    cVisibleFills += 1
+    activeEntryBar := bar_index
+    pending := false
+
+if justClosedByPos
+    cVisibleCloses += 1
+    activeEntryBar := na
+
+if closedByLedger
+    cLedgerClosed += closedDelta
+
+    if not justOpened and strategy.position_size == 0 and strategy.position_size[1] == 0
+        cInvisibleRT += closedDelta
+
+    pending := false
+    activeEntryBar := na
+
+prevClosedTrades := strategy.closedtrades
+
+// ============================================================================
+// PENDING LIMIT CANCELLATION / CONFLICT POLICY
+// Historical broker emulator processes an already-resting limit before this
+// bar-close code can retrospectively cancel it.
+// Therefore a bar that touches limit AND closes invalid is counted as conflict,
+// but fill has execution priority if Strategy Tester filled it.
+// ============================================================================
+
+if pending and strategy.position_size == 0
+    int age = bar_index - pendingSignalBar
+
+    bool touched = pendingDir == 1 ? low <= pendingExecEntry : high >= pendingExecEntry
+    bool wrongClose = pendingDir == 1 ? close < pendingRawEntry - TICK : close > pendingRawEntry + TICK
+
+    if touched and wrongClose
+        cFillInvalidConflict += 1
+
+    if not touched
+        if wrongClose
+            if pendingDir == 1
+                strategy.cancel("C4-L")
+            else
+                strategy.cancel("C4-S")
+
+            pending := false
+            cInvalid += 1
+
+        else if age > RETEST_MAX_MIN
+            if pendingDir == 1
+                strategy.cancel("C4-L")
+            else
+                strategy.cancel("C4-S")
+
+            pending := false
+            cExpired += 1
+
+// Keep protective exits armed while position is open.
+if strategy.position_size > 0
+    strategy.exit("C4-L-X", "C4-L", stop = pendingExecStop, limit = pendingExecTarget)
+
+if strategy.position_size < 0
+    strategy.exit("C4-S-X", "C4-S", stop = pendingExecStop, limit = pendingExecTarget)
+
+// Max hold.
+if strategy.position_size != 0 and not na(activeEntryBar)
+    if bar_index - activeEntryBar >= MAX_HOLD_MIN
+        if strategy.position_size > 0
+            strategy.close("C4-L", comment = "C4 TIME", immediately = true)
+        else
+            strategy.close("C4-S", comment = "C4 TIME", immediately = true)
+
+        cTimeExit += 1
+
+// ============================================================================
+// MOBILE QA MARKS
+// ============================================================================
+
+plotshape(
+     SHOW_MARKS and qaSignalLong,
+     title = "C4 LONG QUALIFIED",
+     style = shape.triangleup,
+     location = location.belowbar,
+     text = "C4?",
+     textcolor = color.white,
+     color = color.new(color.green, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaSignalShort,
+     title = "C4 SHORT QUALIFIED",
+     style = shape.triangledown,
+     location = location.abovebar,
+     text = "C4?",
+     textcolor = color.white,
+     color = color.new(color.red, 25),
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderLong,
+     title = "C4 LONG ORDER",
+     style = shape.circle,
+     location = location.belowbar,
+     text = "O",
+     textcolor = color.white,
+     color = color.green,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and qaOrderShort,
+     title = "C4 SHORT ORDER",
+     style = shape.circle,
+     location = location.abovebar,
+     text = "O",
+     textcolor = color.white,
+     color = color.red,
+     size = size.tiny
+)
+
+plotshape(
+     SHOW_MARKS and fillLong,
+     title = "C4 LONG FILL",
+     style = shape.labelup,
+     location = location.belowbar,
+     text = "C4 L",
+     textcolor = color.white,
+     color = color.green,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and fillShort,
+     title = "C4 SHORT FILL",
+     style = shape.labeldown,
+     location = location.abovebar,
+     text = "C4 S",
+     textcolor = color.white,
+     color = color.red,
+     size = size.small
+)
+
+plotshape(
+     SHOW_MARKS and closedByLedger,
+     title = "C4 LEDGER EXIT",
+     style = shape.xcross,
+     location = location.abovebar,
+     text = "X",
+     color = color.black,
+     size = size.small
+)
+
+plot(SHOW_LEVELS ? frVAH : na, "Frozen VAH raw", color = color.new(color.red, 45), style = plot.style_stepline)
+plot(SHOW_LEVELS ? frVAL : na, "Frozen VAL raw", color = color.new(color.green, 45), style = plot.style_stepline)
+plot(SHOW_LEVELS ? frPOC : na, "Frozen POC raw", color = color.new(color.orange, 45), style = plot.style_stepline)
+plot(SHOW_LEVELS and pending ? pendingFvg : na, "Pending FVG edge", color = color.new(color.blue, 35), style = plot.style_linebr)
+
+// ============================================================================
+// MOBILE DASHBOARD
+// ============================================================================
+
+var table dash = table.new(position.top_right, 4, 15, border_width = 1)
+
+if SHOW_DASH and barstate.islast
+    color hdr = color.rgb(35, 35, 35)
+    color bg1 = color.rgb(245, 245, 245)
+    color bg2 = color.rgb(230, 230, 230)
+    color txt = color.black
+    color inv = color.white
+
+    table.clear(dash, 0, 0, 3, 14)
+
+    table.cell(dash, 0, 0, "ZAC v2 α1.2", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 0, "C4 CLEAN", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 0, "Closed", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 0, str.tostring(strategy.closedtrades), text_color = inv, bgcolor = hdr)
+
+    table.cell(dash, 0, 1, "PF", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 1, str.tostring(f_pf(), "#.###"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 1, "Pos/Pend", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 1, str.tostring(strategy.position_size)+"/"+(pending ? "Y" : "N"), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 2, "Freeze/Bal", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 2, str.tostring(cProfileFreeze)+"/"+str.tostring(cBalancedFreeze), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 2, "RAW L/S", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 2, str.tostring(cRawL)+"/"+str.tostring(cRawS), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 3, "Disp BODY", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 3, str.tostring(cBodyDisp), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 3, "Disp EDGE", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 3, str.tostring(cEdgeDisp), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 4, "Exec disp", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 4, str.tostring(cExecDisp), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 4, "Mode", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 4, DISP_MODE == "BODY_SOURCE" ? "BODY" : "EDGE", text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 5, "FVG same/any", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 5, str.tostring(cSameFvg)+"/"+str.tostring(cAnyFvg), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 5, "Exec FVG", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 5, str.tostring(cExecFvg), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 6, "<=8ATR", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 6, str.tostring(cDist), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 6, "Rel5>=1", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 6, str.tostring(cRel), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 7, "Risk>=.25", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 7, str.tostring(cRisk), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 7, "2R room", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 7, str.tostring(cRoom), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 8, "Orders/Qty0", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 8, str.tostring(cOrders)+"/"+str.tostring(cQty0), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 8, "Blocked", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 8, str.tostring(cBlocked), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 9, "Invalid/Exp", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 9, str.tostring(cInvalid)+"/"+str.tostring(cExpired), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 9, "Fill+Inv", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 9, str.tostring(cFillInvalidConflict), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 10, "Pos fill/close", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 10, str.tostring(cVisibleFills)+"/"+str.tostring(cVisibleCloses), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 10, "Ledger/InvRT", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 10, str.tostring(cLedgerClosed)+"/"+str.tostring(cInvisibleRT), text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 11, "1H create/prune", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 11, str.tostring(c1CreateBull)+"/"+str.tostring(c1CreateBear)+" | "+str.tostring(c1PruneBull)+"/"+str.tostring(c1PruneBear), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 11, "4H create/prune", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 11, str.tostring(c4CreateBull)+"/"+str.tostring(c4CreateBear)+" | "+str.tostring(c4PruneBull)+"/"+str.tostring(c4PruneBear), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 12, "Rel5 / ATR", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 1, 12, str.tostring(rel5, "#.##")+" / "+str.tostring(atr1, "#.##"), text_color = txt, bgcolor = bg2)
+    table.cell(dash, 2, 12, "FVG mode", text_color = txt, bgcolor = bg2)
+    table.cell(dash, 3, 12, FVG_MODE == "LOCATION_AHEAD_SOURCE" ? "AHEAD" : "SAME", text_color = txt, bgcolor = bg2)
+
+    table.cell(dash, 0, 13, "Raw→Exec entry", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 1, 13, str.tostring(pendingRawEntry, "#.##")+"→"+str.tostring(pendingExecEntry, "#.##"), text_color = txt, bgcolor = bg1)
+    table.cell(dash, 2, 13, "1stBar touch", text_color = txt, bgcolor = bg1)
+    table.cell(dash, 3, 13, str.tostring(cFirstBarTouches), text_color = txt, bgcolor = bg1)
+
+    table.cell(dash, 0, 14, "STATUS", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 1, 14, "EXEC QA", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 2, 14, "Ref", text_color = inv, bgcolor = hdr)
+    table.cell(dash, 3, 14, "n376 PF2.04", text_color = inv, bgcolor = hdr)
