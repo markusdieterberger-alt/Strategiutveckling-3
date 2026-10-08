@@ -1,0 +1,50 @@
+//@version=6
+indicator("DAE-14 | Verified 1m W/L Ledger Viewer (1H)", overlay=true, max_labels_count=500)
+
+// ONLY paste lines exported from the 1m strategy Pine Logs.
+// Format: DAE_TRADE,UNIX_MILLISECONDS,EXIT_PRICE,W or L
+// No outcome is inferred from 1H candles.
+ledger = input.text_area("", "Verified 1m trade ledger (one DAE_TRADE line per trade)", group="DAE-14 Verified Trades")
+keepHours = input.int(1000, "Visible history (hours)", minval=1, maxval=10000)
+symbolSize = input.string("Large", "W/L symbol size", options=["Normal", "Large", "Huge"])
+var array<label> markers = array.new<label>()
+var table info = table.new(position.top_right, 1, 2, border_width=1)
+
+if barstate.islast
+    if array.size(markers) > 0
+        for i = array.size(markers) - 1 to 0
+            label.delete(array.get(markers, i))
+        array.clear(markers)
+    int wins = 0
+    int losses = 0
+    int rejected = 0
+    array<string> rows = str.split(ledger, "\n")
+    for i = 0 to array.size(rows) - 1
+        string row = str.trim(array.get(rows, i))
+        if str.length(row) > 0
+            array<string> fields = str.split(row, ",")
+            if array.size(fields) == 4 and str.trim(array.get(fields, 0)) == "DAE_TRADE"
+                float tRaw = str.tonumber(str.trim(array.get(fields, 1)))
+                float pRaw = str.tonumber(str.trim(array.get(fields, 2)))
+                string outcome = str.trim(array.get(fields, 3))
+                if not na(tRaw) and not na(pRaw) and (outcome == "W" or outcome == "L")
+                    int t = int(tRaw)
+                    if t <= time_close and t >= time_close - keepHours * 3600000
+                        bool isWin = outcome == "W"
+                        color bg = isWin ? color.green : color.red
+                        if symbolSize == "Huge"
+                            array.push(markers, label.new(t, pRaw, outcome, xloc=xloc.bar_time, style=label.style_label_center, color=bg, textcolor=color.white, size=size.huge))
+                        else if symbolSize == "Large"
+                            array.push(markers, label.new(t, pRaw, outcome, xloc=xloc.bar_time, style=label.style_label_center, color=bg, textcolor=color.white, size=size.large))
+                        else
+                            array.push(markers, label.new(t, pRaw, outcome, xloc=xloc.bar_time, style=label.style_label_center, color=bg, textcolor=color.white, size=size.normal))
+                        if isWin
+                            wins += 1
+                        else
+                            losses += 1
+                else
+                    rejected += 1
+            else
+                rejected += 1
+    table.cell(info, 0, 0, "Verified 1m fills | W: " + str.tostring(wins) + " L: " + str.tostring(losses), text_color=color.white, bgcolor=color.new(color.black, 15))
+    table.cell(info, 0, 1, "Invalid ledger rows: " + str.tostring(rejected), text_color=color.white, bgcolor=color.new(rejected > 0 ? color.red : color.black, 20))
