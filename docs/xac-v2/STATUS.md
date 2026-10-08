@@ -69,3 +69,27 @@ Important explicit parity issue: intended Python stop geometry uses actual next-
 - logs fill drift >= 1 tick,
 - keeps this mismatch visible rather than silently treating it as canonical parity.
 Awaiting mobile QA.
+
+
+## POC — alpha4 mobile smoke-test
+Observed:
+- Days 20
+- Profiles 1671; ATR ready 1692
+- Raw magnets / first daily candidates: 19
+- Candidate L/S: 12/7
+- Trend pass: 7
+- Orders: 4
+- Position fills: 4
+- Ledger closed: 4
+- Invisible RT: 0
+- Qty0: 3
+- Fill drift >= 1 tick: 3
+- Visible chart-history PF: 1.803
+
+Interpretation:
+Execution path works. Three of seven trend-qualified candidates produced qty=0 under $120 provisional signal-close sizing. Three of four actual fills differed from signal close by >=1 tick, confirming that next-open geometry is a real Python→Pine parity issue for this component. Preserve this as an explicit unresolved parity item; do not hide or retune it.
+
+## Scalp — alpha5
+Isolated 75m VAH trailing scalp rebuild added using preserved source ordering:
+profile includes current completed 5m rejection bar; entry minute excluded from trailing; low-water begins at actual fill price; 30m cooldown from ledger exit time.
+Awaiting mobile QA.
