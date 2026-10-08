@@ -45,3 +45,27 @@ Status: execution smoke-test PASS. One diagnostic discrepancy remains: Vol pass 
 ## IBT — alpha3
 Isolated rebuild added with explicit candidate-before-volume semantics and counters for qty-zero / blocked-position.
 Awaiting mobile QA.
+
+
+## IBT — alpha3.1 mobile execution QA CONFIRMED
+Observed:
+- Strategy Tester closed: 9
+- Orders: 9
+- Ledger closed: 9
+- Position fills: 5
+- Position closes: 5
+- Invisible RT: 4
+- Qty0: 0
+- Blocked pos: 0
+
+Conclusion:
+Four IBT trades are same-bar historical round trips that are invisible to simple position_size transition counters. For Pine parity diagnostics, strategy.closedtrades delta must be tracked alongside position transitions. This is now a required translation rule for all later modules.
+
+## POC — alpha4
+Isolated rebuild added.
+Important explicit parity issue: intended Python stop geometry uses actual next-open -> POC distance, while Pine must choose order quantity before next open is known. alpha4 therefore:
+- submits market order using provisional signal-close sizing,
+- recomputes active stop from actual fill price,
+- logs fill drift >= 1 tick,
+- keeps this mismatch visible rather than silently treating it as canonical parity.
+Awaiting mobile QA.
