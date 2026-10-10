@@ -1,0 +1,46 @@
+// EAA V1 / execution-fixed derivative of the uploaded INDICATOR.
+// NOT compiled in TradingView. No historical performance has been verified.
+// Native bracket results and the separate stop-first stress ledger differ.
+// Developing HTF values are deliberately preserved: research, NOT live-ready.
+strategy("EAA CT Scalper STRATEGY V1", overlay=true,
+     max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=500,
+     initial_capital=25000, currency=currency.USD,
+     default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=0,
+     commission_type=strategy.commission.cash_per_contract, commission_value=0.50,
+     slippage=1, backtest_fill_limits_assumption=1,
+     margin_long=5, margin_short=5, use_bar_magnifier=true,
+     calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=false)
+
+string eaaGroup = "EAA - execution and test protocol"
+int eaaContracts = input.int(1, "Contracts", minval=1, maxval=20, group=eaaGroup)
+int eaaStart = input.time(timestamp("09 Sep 2026 00:00 -0400"), "Test start", group=eaaGroup)
+int eaaEnd = input.time(timestamp("09 Oct 2026 00:00 -0400"), "Test end (exclusive)", group=eaaGroup)
+bool eaaRequireFp = input.bool(true, "Require 11 consecutive footprint bars", group=eaaGroup,
+     tooltip="Execution data guard. Raw original signals and fallbacks are still calculated. Turning this off is a separate diagnostic run.")
+int eaaStressSlip = input.int(1, "Stress stop slippage (ticks)", minval=0, group=eaaGroup,
+     tooltip="Only the separate stress ledger. Match Properties slippage. Does NOT change actual strategy orders.")
+
+// New protocol constraints, not changes to the original signal filters.
+// LucidFlex regular-day model: America/New_York, flat at 16:44, reopen 18:00.
+// Holiday schedules and absent final bars require separate QA; not certified live.
+f_eaaSessionOpen(int stamp, int cutoffMinute) =>
+    int dow = dayofweek(stamp, "America/New_York")
+    int mins = hour(stamp, "America/New_York") * 60 + minute(stamp, "America/New_York")
+    bool beforeCut = dow >= dayofweek.monday and dow <= dayofweek.friday and mins < cutoffMinute
+    bool afterReopen = dow >= dayofweek.sunday and dow <= dayofweek.thursday and mins >= 1080
+    beforeCut or afterReopen
+
+f_eaaTickDown(float value) => math.floor(value / syminfo.mintick) * syminfo.mintick
+f_eaaTickUp(float value) => math.ceil(value / syminfo.mintick) * syminfo.mintick
+f_eaaModel(string kind) =>
+    kind == "FADE" ? 1 : kind == "DIV" ? 2 : kind == "TRAP" ? 3 : kind == "AGG" ? 4 : kind == "ABSORB" ? 5 : kind == "VRZ" ? 6 : 0
+
+if barstate.isfirst
+    if not timeframe.isminutes or timeframe.multiplier != 1
+        runtime.error("EAA CT V1 protocol requires a 1-minute chart.")
+    if syminfo.type != "futures" or (syminfo.root != "MNQ" and syminfo.root != "NQ")
+        runtime.error("EAA CT V1 requires MNQ or NQ futures. Default run: CME_MINI:MNQ1!.")
+    if not chart.is_standard
+        runtime.error("Use standard candles, not synthetic chart prices.")
+    if eaaEnd <= eaaStart
+        runtime.error("Test end must be after test start.")

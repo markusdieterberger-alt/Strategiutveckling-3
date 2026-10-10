@@ -1,0 +1,35 @@
+// ── EAA DIAGNOSTICS / EXPORT FIELDS ────────────────────────────
+// TV native orders are the sole execution book. The stress ledger uses the same
+// accepted trades, repriced adversely; it is NOT an alternate strategy replay,
+// an intraday equity curve, a funded simulation, or a guaranteed performance bound.
+plot(eaaAuditSl, "EAA audit SL", display=display.data_window)
+plot(eaaAuditTp, "EAA audit TP", display=display.data_window)
+plot(eaaAuditSide, "EAA audit side", display=display.data_window)
+plot(eaaBothNow ? 1 : 0, "EAA both levels in bar", display=display.data_window)
+plot(eaaClosedNativeNet, "EAA closed native net", display=display.data_window)
+plot(eaaClosedStressNet, "EAA closed stress net", display=display.data_window)
+plot(eaaClosedAmbiguous, "EAA closed ambiguous", display=display.data_window)
+plot(eaaClosedExitTime, "EAA closed exit time ms", display=display.data_window)
+plot(eaaStressNet, "EAA cumulative stress net", display=display.data_window)
+plot(eaaSubmittedModel, "EAA submitted model 1-6 signed", display=display.data_window)
+plot(ctLongFiredThisBar ? f_eaaModel(eaaRawLongKind) : ctShortFiredThisBar ? -f_eaaModel(eaaRawShortKind) : 0, "EAA raw model 1-6 signed", display=display.data_window)
+plot(not na(fp) ? 1 : 0, "EAA footprint present", display=display.data_window)
+plot(strategy.closedtrades, "EAA closed trade count", display=display.data_window)
+plot(eaaSide != 0 ? ctActiveSl : na, "EAA active SL", color=color.red, style=plot.style_linebr)
+plot(eaaSide != 0 ? ctActiveTp : na, "EAA active TP", color=color.green, style=plot.style_linebr)
+
+if barstate.islast
+    var table eaaQa = table.new(position.top_right, 1, 9, bgcolor=color.new(color.black, 15))
+    table.cell(eaaQa, 0, 0, "EAA CT V1 | RESEARCH / HTF repaint risk", text_color=color.orange, text_size=size.small)
+    table.cell(eaaQa, 0, 1, "Closed/audited " + str.tostring(strategy.closedtrades) + "/" + str.tostring(eaaAuditedTrades) + " | same-bar " + str.tostring(eaaSameBarTrades), text_color=color.white, text_size=size.small)
+    table.cell(eaaQa, 0, 2, "Ambiguous trades " + str.tostring(eaaAmbiguousTrades) + " | gap entries " + str.tostring(eaaGapEntries), text_color=color.yellow, text_size=size.small)
+    table.cell(eaaQa, 0, 3, "Stop-first stress net " + str.tostring(eaaStressNet, "#.##") + " USD", text_color=color.white, text_size=size.small)
+    table.cell(eaaQa, 0, 4, "Missing FP bars " + str.tostring(eaaMissingFpBars) + " | data blocks " + str.tostring(eaaBlockedData), text_color=color.yellow, text_size=size.small)
+    table.cell(eaaQa, 0, 5, "Raw " + str.tostring(eaaRawSignals) + " | busy blocks " + str.tostring(eaaBlockedBusy), text_color=color.white, text_size=size.small)
+    table.cell(eaaQa, 0, 6, "Time blocks " + str.tostring(eaaBlockedTime) + " | level blocks " + str.tostring(eaaBlockedLevels), text_color=color.white, text_size=size.small)
+    table.cell(eaaQa, 0, 7, "Gaps " + str.tostring(eaaExposureGaps) + " | conflicts " + str.tostring(eaaConflicts) + " | unfilled " + str.tostring(eaaUnfilledOrders), text_color=color.yellow, text_size=size.small)
+    table.cell(eaaQa, 0, 8, "Smart exits disabled IN ORIGINAL | no live approval", text_color=color.orange, text_size=size.small)
+
+// Use strategy ORDER-FILL alerts for actual simulated fills. Original indicator
+// alert()/alertcondition() tickets were removed to avoid false/duplicate orders.
+// Messages are diagnostic identifiers, NOT a configured Tradovate webhook.

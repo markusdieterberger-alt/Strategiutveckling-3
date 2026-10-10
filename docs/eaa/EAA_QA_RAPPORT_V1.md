@@ -1,6 +1,6 @@
 # EAA - teknisk QA v1
 
-Datum: 2026-10-09. Status: HOLD for promotion. Ingen Pine-fil har kompilerats eller korts i TradingView i detta arbete. Ingen ny strategiprestanda eller funded-sannolikhet ar verifierad.
+Datum: 2026-10-09; CT-status uppdaterad 2026-10-10. Status: HOLD for promotion. Ingen Pine-fil har kompilerats eller korts i TradingView i detta arbete. Ingen ny strategiprestanda eller funded-sannolikhet ar verifierad.
 
 ## Kallor och identitet
 
@@ -36,21 +36,13 @@ En vanlig Pine-bracket med vilande stop och target ger INTE en generell stop-fir
 
 Darfor ar detta krav fortfarande EJ VERIFIERAT i Pine. Same-bar-affarer flaggas; kvarvarande tvetydiga stop/target-traffar ska granskas mot underliggande tidsupplosning. Simulatorns OHLC-lage provar adverse fore favorable och markerar alltid approximation; det ersatter inte TradingViews handelsbok och bevisar inte Pine-paritet. Ingen positiv promotion innan relevant tvetydighet ar upplost eller konsekvensen uttryckligen bedomd.
 
-## CT: verklig blockerare och statiska fynd
+## CT: portning levererad 2026-10-10, TradingView-test aterstar
 
-Ingen fil med namnet `EAA_CT_SCALPER_STRATEGY_V1.pine` har skapats: det skulle felaktigt antyda att den begarda indikatorn konverterats. Den publik-hamtade referensen ligger endast i `pine/eaa/reference/` och ska INTE koras som EAA:s fardiga CT-leverans.
+Det uppladdade indikatororiginalet har nu hamtats, hashverifierats och bevarats. `pine/eaa/EAA_CT_SCALPER_STRATEGY_V1.pine` ar byggd fran just detta original, med alla sex entrymodeller och oforandrade signaluttryck. Den publika BACKTEST-referensen ovan ar endast historiskt granskningsunderlag och anvands inte av byggskriptet.
 
-STATISKT GRANSKAT i den publika referensen:
+Se **[EAA_CT_SCALPER_QA_V1.md](EAA_CT_SCALPER_QA_V1.md)** for aktuell kallidentitet, samtliga andringar, statiska kontroller, syntetiska kontraktstester och begransningar. Full rad-diff och logg finns i `evidence/CT_ORIGINAL_TO_STRATEGY_V1.diff` och `evidence/CT_VERIFICATION_V1.json`. Den nya korningen gav 87 godkanda tester, varav 37 nya CT-tester, samt 25 CT-textkontrakt. Inga nya Pine-kompilerings- eller prestandabevis finns.
 
-1. Tolv entry/exit-par for sex modeller; pyramiding 20 och gemensamma `ctInLong/ctInShort/ctActiveSl` kan avvika fran flera samtidiga orders.
-2. `f_openTicket` justerar SL med safe-clamp, men `strategy.exit` skickar `slCand`: visuella tickets och verkliga exits kan skilja sig.
-3. Ticketmotorn ger TP-text nar TP och SL traffas samtidigt. Detta bevisar inte faktisk TP-fill i Strategy Tester.
-4. Daily pivots anvander `[1]` med `lookahead_on`, ett avsiktligt avslutat-dagsmonster. 5/15/60/240m anvander daremot oforskjutna HTF-varden med `lookahead_off`: historik saknar direkt framtidslacka, men realtime/reload kan skilja sig. En confirmed-HTF-fix skulle andra signalidentiteten och far inte ske tyst.
-5. En `request.footprint(50,70)`, samt TICK, VIX, SPY och ES. Saknad footprint ger fallbacks (bland annat 0 delta och kvarvarande POC); Premium-rattighet ar inte bevis for full historiktackning eller externa symbolers dataabonnemang.
-6. Ingen pa de begarda Lucid-granserna verifierad flat-before-close/order-cancel-kedja. Ingen verifierad intrabar- eller mobilautomationsparitet.
-7. Publiceringens smart exits ar uttryckligen avstangda. Den far inte presenteras som en oforandrad port av en indikator vars exakta kod saknas.
-
-For att lasa upp CT behovs den fullstandiga tidigare inklistrade indikatorn som `.pine` eller `.txt`, inte en bild eller funktionssammanfattning. Darefter: bevara/hash original -> exakt diff -> separata signal- och ordermodeller -> single-position-prioritet -> konsekvent clamp/ticknivaa -> closedtrades-ledger -> statisk QA -> TradingView smoke. Inga trosklar optimeras.
+Originalets smart exits ar aven har avstangda; oforskjutna HTF-varden och repaint-risk bevaras. Riktiga enpositionsorder, fryst och konsekvent SL/TP, dagsslutsskydd, footprint-datasparr och separat pessimistisk fillkontroll ar tillagda. Native stop-first ar inte garanterat. **[Kort CT-kororder](EAA_CT_DATORPASS_KORORDER_V1.md)** ersatter tidigare uppmaning att hoppa over CT.
 
 ## Simulatorns verifieringsstatus
 

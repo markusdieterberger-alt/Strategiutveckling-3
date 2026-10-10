@@ -1,0 +1,138 @@
+// ── EAA ACTUAL BROKER STATE AND SEPARATE CONSERVATIVE AUDIT ────
+var float ctActiveTp = na
+var float ctActiveSl = na
+var float ctEntryAtr = na
+var float ctPeakLongProfit = 0.0
+var float ctPeakShortProfit = 0.0
+var int eaaSide = 0
+var int eaaSubmittedBar = na
+var string eaaEntryId = ""
+var bool eaaTradeAmbiguous = false
+var bool eaaSawFill = false
+var float eaaStressStop = na
+var int eaaAmbiguousTrades = 0
+var int eaaSameBarTrades = 0
+var int eaaGapEntries = 0
+var int eaaExposureGaps = 0
+var int eaaMissingFpBars = 0
+var int eaaFootprintStreak = 0
+var int eaaBlockedBusy = 0
+var int eaaBlockedTime = 0
+var int eaaBlockedData = 0
+var int eaaBlockedLevels = 0
+var int eaaRawSignals = 0
+var int eaaConflicts = 0
+var int eaaUnfilledOrders = 0
+var int eaaAuditedTrades = 0
+var float eaaStressNet = 0.0
+
+bool eaaInDates = time_close >= eaaStart and time_close < eaaEnd
+eaaFootprintStreak := not na(fp) ? eaaFootprintStreak + 1 : 0
+if eaaInDates and na(fp)
+    eaaMissingFpBars += 1
+bool eaaDataOk = not eaaRequireFp or eaaFootprintStreak >= 11
+bool eaaClosedNow = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
+// Liquidation/partial fills invalidate this single-position research contract.
+// Fail visibly instead of silently resetting protection on a residual position.
+if strategy.position_size != 0 and (math.abs(strategy.position_size) != eaaContracts or eaaSide == 0 or eaaClosedNow)
+    runtime.error("EAA position invariant failed (partial fill/liquidation). Export the error; this run is invalid.")
+// Immediate session closes become observable on the following calculation;
+// never inspect the following bar's extremes as if that closed trade were open.
+bool eaaExitOnCurrentBar = eaaClosedNow ? strategy.closedtrades.exit_bar_index(strategy.closedtrades - 1) == bar_index : true
+bool eaaHadExposure = eaaSide != 0 and not na(eaaSubmittedBar) and bar_index > eaaSubmittedBar and eaaExitOnCurrentBar and (strategy.position_size != 0 or eaaClosedNow)
+float eaaAuditSl = eaaHadExposure ? ctActiveSl : na
+float eaaAuditTp = eaaHadExposure ? ctActiveTp : na
+int eaaAuditSide = eaaHadExposure ? eaaSide : 0
+bool eaaBothNow = eaaHadExposure and low <= math.min(ctActiveSl, ctActiveTp) and high >= math.max(ctActiveSl, ctActiveTp)
+float eaaClosedNativeNet = na
+float eaaClosedStressNet = na
+int eaaClosedAmbiguous = 0
+int eaaClosedExitTime = na
+
+if eaaHadExposure and time > time_close[1]
+    eaaExposureGaps += 1
+if eaaBothNow
+    eaaTradeAmbiguous := true
+    // Stop-first OHLC envelope: adverse gap, then adverse stop slippage.
+    // This does NOT rewrite TradingView trades or pretend to know tick order.
+    float adverseOpen = eaaSide == 1 ? math.min(open, ctActiveSl) : math.max(open, ctActiveSl)
+    float adverseExit = adverseOpen - eaaSide * eaaStressSlip * syminfo.mintick
+    eaaStressStop := na(eaaStressStop) ? adverseExit : eaaSide == 1 ? math.min(eaaStressStop, adverseExit) : math.max(eaaStressStop, adverseExit)
+
+if not eaaSawFill and (strategy.position_size != 0 or eaaClosedNow)
+    float filledAt = strategy.position_size != 0 ? strategy.position_avg_price : strategy.closedtrades.entry_price(strategy.closedtrades - 1)
+    if eaaSide * (filledAt - ctActiveSl) <= 0 or eaaSide * (ctActiveTp - filledAt) <= 0
+        eaaGapEntries += 1
+    eaaSawFill := true
+
+if eaaClosedNow
+    if strategy.closedtrades - nz(strategy.closedtrades[1], 0) != 1
+        runtime.error("EAA single-slot invariant failed: multiple closes in one bar.")
+    int tradeNo = strategy.closedtrades - 1
+    string exitComment = strategy.closedtrades.exit_comment(tradeNo)
+    bool expectedExit = exitComment == "SL" or exitComment == "TP" or exitComment == "PAT" or exitComment == "SESSION_OR_TEST_END"
+    if math.abs(strategy.closedtrades.size(tradeNo)) != eaaContracts or eaaSide == 0 or not expectedExit
+        runtime.error("EAA closed-trade invariant failed (size/state/liquidation). This run is invalid.")
+    eaaAuditedTrades += 1
+    eaaClosedExitTime := strategy.closedtrades.exit_time(tradeNo)
+    float qty = math.abs(strategy.closedtrades.size(tradeNo))
+    float actualEntry = strategy.closedtrades.entry_price(tradeNo)
+    float actualExit = strategy.closedtrades.exit_price(tradeNo)
+    float fees = strategy.closedtrades.commission(tradeNo)
+    eaaClosedNativeNet := eaaSide * (actualExit - actualEntry) * syminfo.pointvalue * qty - fees
+    float adverseNet = eaaTradeAmbiguous ? eaaSide * (eaaStressStop - actualEntry) * syminfo.pointvalue * qty - fees : eaaClosedNativeNet
+    eaaClosedStressNet := math.min(eaaClosedNativeNet, adverseNet)
+    eaaStressNet += eaaClosedStressNet
+    eaaClosedAmbiguous := eaaTradeAmbiguous ? 1 : 0
+    eaaAmbiguousTrades += eaaClosedAmbiguous
+    eaaSameBarTrades += strategy.closedtrades.entry_bar_index(tradeNo) == strategy.closedtrades.exit_bar_index(tradeNo) ? 1 : 0
+    strategy.cancel_all()
+    ctActiveTp := na
+    ctActiveSl := na
+    ctEntryAtr := na
+    ctPeakLongProfit := 0.0
+    ctPeakShortProfit := 0.0
+    eaaSide := 0
+    eaaSubmittedBar := na
+    eaaEntryId := ""
+    eaaSawFill := false
+    eaaTradeAmbiguous := false
+    eaaStressStop := na
+
+// Margin/order rejection must not leave the single slot permanently reserved.
+bool eaaUnfilledNow = eaaSide != 0 and not na(eaaSubmittedBar) and bar_index > eaaSubmittedBar and strategy.position_size == 0 and not eaaClosedNow
+if eaaUnfilledNow
+    strategy.cancel_all()
+    eaaUnfilledOrders += 1
+    eaaSide := 0
+    eaaSubmittedBar := na
+    eaaEntryId := ""
+    ctActiveSl := na
+    ctActiveTp := na
+    ctEntryAtr := na
+    eaaTradeAmbiguous := false
+    eaaStressStop := na
+
+bool ctInLong = strategy.position_size > 0
+bool ctInShort = strategy.position_size < 0
+float ctEntryPrice = strategy.position_size != 0 ? strategy.position_avg_price : na
+int ctEntryBar = strategy.opentrades > 0 ? strategy.opentrades.entry_bar_index(0) : na
+float ctCurLongProfitAtr = ctInLong and not na(ctEntryPrice) ? (close - ctEntryPrice) / nz(ctEntryAtr, atr) : 0.0
+float ctCurShortProfitAtr = ctInShort and not na(ctEntryPrice) ? (ctEntryPrice - close) / nz(ctEntryAtr, atr) : 0.0
+if ctInLong
+    ctPeakLongProfit := math.max(ctPeakLongProfit, ctCurLongProfitAtr)
+if ctInShort
+    ctPeakShortProfit := math.max(ctPeakShortProfit, ctCurShortProfitAtr)
+float ctTpProgressLong = ctInLong and not na(ctActiveTp) and (ctActiveTp - ctEntryPrice) > 0 ? (close - ctEntryPrice) / (ctActiveTp - ctEntryPrice) : 0.0
+float ctTpProgressShort = ctInShort and not na(ctActiveTp) and (ctEntryPrice - ctActiveTp) > 0 ? (ctEntryPrice - close) / (ctEntryPrice - ctActiveTp) : 0.0
+
+// Raw candidates, evaluated even while occupied. Their filters are unchanged.
+bool ctLongFiredThisBar = false
+bool ctShortFiredThisBar = false
+float eaaRawLongSl = na
+float eaaRawLongTp = na
+float eaaRawShortSl = na
+float eaaRawShortTp = na
+string eaaRawLongKind = ""
+string eaaRawShortKind = ""
+

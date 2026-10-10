@@ -1,6 +1,6 @@
 # EAA Strategy Validation Factory v1 - delleverans
 
-Datum: 2026-10-09. Leveranskontroll uppdaterad 2026-10-10. **Status: DELLEVERANS / CT BLOCKERAD / INGEN LIVE-PROMOTION.**
+Datum: 2026-10-09. Leveranskontroll uppdaterad 2026-10-10. **Status uppdaterad 2026-10-10: CT-KOD OCH LOKAL QA LEVERERADE / TRADINGVIEW-TEST ATERSTAR / INGEN LIVE-PROMOTION.**
 
 ## Levererat
 
@@ -8,11 +8,12 @@ Datum: 2026-10-09. Leveranskontroll uppdaterad 2026-10-10. **Status: DELLEVERANS
 - Teknisk QA med exakta andringar, kallidentiteter, repaint-/HTF-/same-bar-risker och tydliga verifieringsnivaer.
 - Ateranvandbar Python-simulator med CSV/XLSX-import, EOD-trailing, intradagsmarkering, mjuk DLL, profit-stop, consistency, kontrakts- och kostnadsscenarier, rullande fonster och seedad dagblock-bootstrap.
 - 50 godkanda automatiska tester, CLI-smoke med 8 kostnads-/storleksscenarier och block-bootstrap, kallhashar och datainventering. Testlogg anger faktisk Pythonversion, kommandon, exitkoder och antal tester. Alla prestationssiffror i smoke-filen ar syntetiska.
-- Kort datorpass-kororder: HMA ORIGINAL, CT nar ratt fil finns, HMA EXEC FIXED. Ingen optimering vid datorn.
+- CT-strategi fran det exakta uppladdade indikatororiginalet, separat CT-QA, full diff och 37 nya CT-tester. Den samlade senaste testsuiten ger 87 godkanda tester.
+- Kort datorpass-kororder: HMA ORIGINAL, CT, HMA EXEC FIXED. CT:s separata kororder anger MNQ 1m och fast 30-dagarsprov. Ingen optimering vid datorn.
 
 ## Inte levererat som klart
 
-**CT-konverteringen:** konversationssokningen kunde bekrafta tidigare kodinklistrningar men inte aterge den exakta indikatorns fulltext. Drive och samtliga befintliga repo-brancher inneholl inte filen. Publik BACKTEST-kod kunde hamtas men har annan deklaration och avstangda smart exits; den ar bevarad endast som granskningsreferens. Den efterfragade `EAA_CT_SCALPER_STRATEGY_V1.pine` ar darfor INTE skapad. Att konvertera denna andra version skulle riskera fel strategiregler.
+**CT-konverteringen ar nu levererad:** tidigare blockerande kallkod finns nu som en uppladdad transkription av indikatorn. Filen ar hashverifierad mot A003 och bevarad. Strategin har samtliga sex modeller; publika BACKTEST-koden anvands inte. [Aktuell CT-QA och alla andringar](EAA_CT_SCALPER_QA_V1.md). Identitet mot de tidigare chattmeddelandena eller upphovsmannens egen indikator ar fortfarande inte oberoende byteverifierad.
 
 **Pine-/prestandavalidering:** ingen TradingView-kompilering eller Strategy Tester-korning gjord. Inga verkliga PASS/FAIL-tal, PF eller optimal kontraktsstorlek finns. Det som korts ar syntetiska programkontroller, inte historisk strategivalidering. En Pine-kompatibilitetsfix ar aldrig compilerbevis.
 
@@ -32,7 +33,7 @@ metadata/manifest avser Databento-jobbet GLBX-20261003-KGLJVRFCYK, OHLCV1m MNQ.F
 
 ## Nasta faktiska steg
 
-1. Aterlamna den fullstandiga CT-indikatorn fran projektchatten som `.pine` eller `.txt` via mobilen. Det ar den enda ytterligare kallkod som blockerar CT-portningen.
+1. Kor det korta [CT-datorpasset](EAA_CT_DATORPASS_KORORDER_V1.md): klistra in hela strategin, kompilera, kor rapporten och exportera. Ingen ytterligare kallfil behovs.
 2. Gor det korta HMA-datorpasset enligt korordern. Vid originalets eventuella typfel: rapportera exakt fel, inga improviserade andringar.
 3. Work laser fulla exporter, gor trade-jamforelse, intradags-/same-bar-QA och funded-replay. Storlek valjs forst efter faktisk evidens, inte utifran syntetiska exempel.
 

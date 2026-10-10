@@ -1,0 +1,79 @@
+// ── EAA REAL ORDER DISPATCH ────────────────────────────────────
+// Regular cutoff is one minute before the published 16:45 ET deadline.
+// Block new signals another minute earlier. The market entry fills next tick.
+bool eaaForceFlat = time_close >= eaaEnd or not f_eaaSessionOpen(time_close, 1004) or session.islastbar
+bool eaaTimeOk = eaaInDates and f_eaaSessionOpen(time_close, 1003) and not eaaForceFlat
+bool eaaRawAny = ctLongFiredThisBar or ctShortFiredThisBar
+bool eaaConflict = ctLongFiredThisBar and ctShortFiredThisBar
+bool eaaSlotFree = strategy.position_size == 0 and eaaSide == 0 and not eaaClosedNow and not eaaUnfilledNow
+bool eaaOrderSubmitted = false
+int eaaSubmittedModel = 0
+
+if eaaRawAny and eaaInDates
+    eaaRawSignals += 1
+    if eaaConflict
+        eaaConflicts += 1
+    else if not eaaSlotFree
+        eaaBlockedBusy += 1
+    else if not eaaTimeOk
+        eaaBlockedTime += 1
+    else if not eaaDataOk
+        eaaBlockedData += 1
+
+if barstate.isconfirmed
+    if eaaForceFlat
+        strategy.cancel_all()
+        if strategy.position_size != 0
+            strategy.close_all(comment="SESSION_OR_TEST_END", immediately=true,
+                 alert_message="EAA_CT_V1|EXIT|SESSION_OR_TEST_END")
+        // An unfilled market order can only be pending until the next tick.
+        if strategy.position_size == 0
+            eaaSide := 0
+            eaaSubmittedBar := na
+            ctActiveSl := na
+            ctActiveTp := na
+            ctEntryAtr := na
+    else
+        // Keep the same immutable absolute bracket; never recalculate from a
+        // later signal or mutate the position to an opposite candidate.
+        if strategy.position_size != 0
+            strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
+                 comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
+            if (ctInLong and ctPatternExitLong) or (ctInShort and ctPatternExitShort)
+                strategy.close(eaaEntryId, comment="PAT", alert_message="EAA_CT_V1|EXIT|PAT")
+        if eaaRawAny and not eaaConflict and eaaSlotFree and eaaTimeOk and eaaDataOk
+            bool isLongOrder = ctLongFiredThisBar
+            float rawSl = isLongOrder ? eaaRawLongSl : eaaRawShortSl
+            float rawTp = isLongOrder ? eaaRawLongTp : eaaRawShortTp
+            // Original f_openTicket safety clamp, applied once to all real levels.
+            float minSlDist = atr * f_dyn(0.8, 0.15, -0.05, -0.05, 0.05, -0.03, 0.1, -0.03, 0.4, 1.2)
+            float safeSl = isLongOrder ? math.min(rawSl, close - minSlDist) : math.max(rawSl, close + minSlDist)
+            float finalSl = isLongOrder ? f_eaaTickDown(safeSl) : f_eaaTickUp(safeSl)
+            float finalTp = isLongOrder ? f_eaaTickUp(rawTp) : f_eaaTickDown(rawTp)
+            bool validLevels = not na(finalSl) and not na(finalTp) and atr > 0 and (isLongOrder ? finalSl < close and finalTp > close : finalSl > close and finalTp < close)
+            if validLevels
+                eaaSide := isLongOrder ? 1 : -1
+                string kind = isLongOrder ? eaaRawLongKind : eaaRawShortKind
+                eaaEntryId := (isLongOrder ? "CT_L_" : "CT_S_") + kind
+                ctActiveSl := finalSl
+                ctActiveTp := finalTp
+                ctEntryAtr := atr
+                ctPeakLongProfit := 0.0
+                ctPeakShortProfit := 0.0
+                eaaSubmittedBar := bar_index
+                eaaSawFill := false
+                eaaTradeAmbiguous := false
+                eaaStressStop := na
+                eaaOrderSubmitted := true
+                eaaSubmittedModel := eaaSide * f_eaaModel(kind)
+                strategy.cancel_all()
+                strategy.entry(eaaEntryId, isLongOrder ? strategy.long : strategy.short, qty=eaaContracts,
+                     comment=eaaEntryId + "|SL=" + str.tostring(finalSl, format.mintick) + "|TP=" + str.tostring(finalTp, format.mintick),
+                     alert_message="EAA_CT_V1|ENTRY|" + eaaEntryId)
+                // Same calculation as entry: protection is not delayed until a
+                // later bar-close observes the new position.
+                strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
+                     comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
+            else
+                eaaBlockedLevels += 1
+

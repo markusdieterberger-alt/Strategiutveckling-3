@@ -20,7 +20,27 @@
     "reference_sha256": "32f2d59481f38db304aa209e0f1b8d236291bc523dc7e67773135226a94c8959",
     "reference_bytes": 118027,
     "reference_lines": 1927,
-    "requested_indicator_recovered": false,
-    "warning": "Public BACKTEST is already strategy(), pyramiding=20, smart exits disabled. Not an identity substitute for the requested indicator. No conversion delivered."
+    "requested_indicator_recovered": true,
+    "warning": "Historical public BACKTEST reference only. NOT used for the indicator conversion; see ct_indicator.",
+    "used_for_conversion": false
+  },
+  "updated_date": "2026-10-10",
+  "ct_indicator": {
+    "url": "https://drive.google.com/file/d/1zsoCvNPmFF6KMVaC5ETRwWF0DnYT2oFO/view",
+    "retrieved_date": "2026-10-10",
+    "original_path": "pine/eaa/reference/EAA_CT_SCALPER_INDICATOR_ORIGINAL_FROM_CHAT_2026-10-10.pine",
+    "original_sha256": "9fa2463f2b27ae54554ea24290c38b9cd068ac240b61da7ca7b7cf44feed2b30",
+    "original_bytes": 110723,
+    "original_lines": 1871,
+    "source_origin": "Project-leader transcription of two chat messages. Uploaded bytes verified against A003; independent byte identity to prior chat or original author source unverified.",
+    "strategy_path": "pine/eaa/EAA_CT_SCALPER_STRATEGY_V1.pine",
+    "strategy_sha256": "c386f4f7d3e30e3ebfe57ebe5e35e40c5560fda88b7f38296405d080ebbcf8e8",
+    "strategy_bytes": 118129,
+    "strategy_lines": 1949,
+    "build_command": "python -m eaa.build_ct",
+    "qa_command": "python -m eaa.verify_ct",
+    "status": "LOCAL_QA_PASSED_AWAITING_TRADINGVIEW",
+    "pine_compiled": false,
+    "performance_validated": false
   }
 }

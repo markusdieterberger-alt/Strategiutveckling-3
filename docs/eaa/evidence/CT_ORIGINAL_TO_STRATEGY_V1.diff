@@ -1,0 +1,712 @@
+--- pine/eaa/reference/EAA_CT_SCALPER_INDICATOR_ORIGINAL_FROM_CHAT_2026-10-10.pine
++++ pine/eaa/EAA_CT_SCALPER_STRATEGY_V1.pine
+@@ -6,7 +6,52 @@
+ // ╚══════════════════════════════════════════════════════════════╝
+ 
+ //@version=6
+-indicator("NQ/MNQ CT Scalper", overlay=true, max_lines_count=500, max_labels_count=500, max_boxes_count=500)
++// EAA V1 / execution-fixed derivative of the uploaded INDICATOR.
++// NOT compiled in TradingView. No historical performance has been verified.
++// Native bracket results and the separate stop-first stress ledger differ.
++// Developing HTF values are deliberately preserved: research, NOT live-ready.
++strategy("EAA CT Scalper STRATEGY V1", overlay=true,
++     max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=500,
++     initial_capital=25000, currency=currency.USD,
++     default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=0,
++     commission_type=strategy.commission.cash_per_contract, commission_value=0.50,
++     slippage=1, backtest_fill_limits_assumption=1,
++     margin_long=5, margin_short=5, use_bar_magnifier=true,
++     calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=false)
++
++string eaaGroup = "EAA - execution and test protocol"
++int eaaContracts = input.int(1, "Contracts", minval=1, maxval=20, group=eaaGroup)
++int eaaStart = input.time(timestamp("09 Sep 2026 00:00 -0400"), "Test start", group=eaaGroup)
++int eaaEnd = input.time(timestamp("09 Oct 2026 00:00 -0400"), "Test end (exclusive)", group=eaaGroup)
++bool eaaRequireFp = input.bool(true, "Require 11 consecutive footprint bars", group=eaaGroup,
++     tooltip="Execution data guard. Raw original signals and fallbacks are still calculated. Turning this off is a separate diagnostic run.")
++int eaaStressSlip = input.int(1, "Stress stop slippage (ticks)", minval=0, group=eaaGroup,
++     tooltip="Only the separate stress ledger. Match Properties slippage. Does NOT change actual strategy orders.")
++
++// New protocol constraints, not changes to the original signal filters.
++// LucidFlex regular-day model: America/New_York, flat at 16:44, reopen 18:00.
++// Holiday schedules and absent final bars require separate QA; not certified live.
++f_eaaSessionOpen(int stamp, int cutoffMinute) =>
++    int dow = dayofweek(stamp, "America/New_York")
++    int mins = hour(stamp, "America/New_York") * 60 + minute(stamp, "America/New_York")
++    bool beforeCut = dow >= dayofweek.monday and dow <= dayofweek.friday and mins < cutoffMinute
++    bool afterReopen = dow >= dayofweek.sunday and dow <= dayofweek.thursday and mins >= 1080
++    beforeCut or afterReopen
++
++f_eaaTickDown(float value) => math.floor(value / syminfo.mintick) * syminfo.mintick
++f_eaaTickUp(float value) => math.ceil(value / syminfo.mintick) * syminfo.mintick
++f_eaaModel(string kind) =>
++    kind == "FADE" ? 1 : kind == "DIV" ? 2 : kind == "TRAP" ? 3 : kind == "AGG" ? 4 : kind == "ABSORB" ? 5 : kind == "VRZ" ? 6 : 0
++
++if barstate.isfirst
++    if not timeframe.isminutes or timeframe.multiplier != 1
++        runtime.error("EAA CT V1 protocol requires a 1-minute chart.")
++    if syminfo.type != "futures" or (syminfo.root != "MNQ" and syminfo.root != "NQ")
++        runtime.error("EAA CT V1 requires MNQ or NQ futures. Default run: CME_MINI:MNQ1!.")
++    if not chart.is_standard
++        runtime.error("Use standard candles, not synthetic chart prices.")
++    if eaaEnd <= eaaStart
++        runtime.error("Test end must be after test start.")
+ 
+ // ── INPUTS ────────────────────────────────────────────────────
+ var g1 = "1 - CT Signal"
+@@ -528,21 +573,6 @@
+ // ── ES FUTURES (SMT divergence — NQ vs ES structural pivot comparison) ──
+ [esHigh, esLow] = request.security("ES1!", timeframe.period, [high, low], lookahead=barmerge.lookahead_off)
+ 
+-// ── TRADE TICKET SYSTEM ───────────────────────────────────────
+-type TixEntry
+-    int    eBar
+-    bool   isLong
+-    float  sl
+-    float  tp
+-    line   slLn
+-    line   tpLn
+-    label  lbl
+-    bool   closed
+-    int    stars
+-    string kind
+-
+-var array<TixEntry> activeTix = array.new<TixEntry>()
+-
+ f_starStr(int n) =>
+     n >= 7 ? "★★★" : n >= 6 ? "★★✦" : n >= 5 ? "★★" : n >= 4 ? "★✦" : n >= 3 ? "★" : n >= 2 ? "✦" : ""
+ 
+@@ -1224,49 +1254,143 @@
+     tpDist := math.max(tpDist, atr * 0.5)
+     close - tpDist
+ 
+-// ── OPEN TICKET FUNCTION ──────────────────────────────────────
+-f_openTicket(bool isLong, float slVal, float tpVal, int stars, string dir, string kind) =>
+-    // Safety clamp: SL must be on correct side of entry (dynamic min distance)
+-    minSlDist = atr * f_dyn(0.8, 0.15, -0.05, -0.05, 0.05, -0.03, 0.1, -0.03, 0.4, 1.2)
+-    safeSl = isLong ? math.min(slVal, close - minSlDist) : math.max(slVal, close + minSlDist)
+-    starTxt = stars > 0 ? " " + f_starStr(stars) : ""
+-    lblText = dir + starTxt + " [" + kind + "]\nTP: " + str.tostring(math.round(tpVal)) + "\nSL: " + str.tostring(math.round(safeSl))
+-    entryCol = isLong ? color.blue : color.red
+-    slLine  = line.new(bar_index, safeSl, bar_index + 15, safeSl, color=color.red,   width=1, style=line.style_dashed)
+-    tpLine  = line.new(bar_index, tpVal, bar_index + 15, tpVal, color=color.green, width=1, style=line.style_dashed)
+-    lblY     = isLong ? low - atr * 1.5 : high + atr * 1.5
+-    lblStyle = isLong ? label.style_label_up : label.style_label_down
+-    lbl = label.new(bar_index, lblY, lblText, color=color.new(entryCol, 10), textcolor=color.white, style=lblStyle, size=size.normal)
+-    tix = TixEntry.new(bar_index, isLong, safeSl, tpVal, slLine, tpLine, lbl, false, stars, kind)
+-    activeTix.push(tix)
+-
+-// ── TRADE STATE ───────────────────────────────────────────────
+-var bool  ctInLong     = false
+-var bool  ctInShort    = false
+-var float ctEntryPrice = na
+-var int   ctEntryBar   = na
+-var float ctEntryAtr   = na
+-var float ctActiveTp   = na
+-var float ctActiveSl   = na
+-var float ctPeakLongProfit  = 0.0
++// ── EAA ACTUAL BROKER STATE AND SEPARATE CONSERVATIVE AUDIT ────
++var float ctActiveTp = na
++var float ctActiveSl = na
++var float ctEntryAtr = na
++var float ctPeakLongProfit = 0.0
+ var float ctPeakShortProfit = 0.0
+-
+-bool ctLongFiredThisBar  = false
+-bool ctShortFiredThisBar = false
+-
+-// Current P&L tracking
+-float ctCurLongProfitAtr  = ctInLong  and not na(ctEntryPrice) ? (close - ctEntryPrice) / nz(ctEntryAtr, atr) : 0.0
++var int eaaSide = 0
++var int eaaSubmittedBar = na
++var string eaaEntryId = ""
++var bool eaaTradeAmbiguous = false
++var bool eaaSawFill = false
++var float eaaStressStop = na
++var int eaaAmbiguousTrades = 0
++var int eaaSameBarTrades = 0
++var int eaaGapEntries = 0
++var int eaaExposureGaps = 0
++var int eaaMissingFpBars = 0
++var int eaaFootprintStreak = 0
++var int eaaBlockedBusy = 0
++var int eaaBlockedTime = 0
++var int eaaBlockedData = 0
++var int eaaBlockedLevels = 0
++var int eaaRawSignals = 0
++var int eaaConflicts = 0
++var int eaaUnfilledOrders = 0
++var int eaaAuditedTrades = 0
++var float eaaStressNet = 0.0
++
++bool eaaInDates = time_close >= eaaStart and time_close < eaaEnd
++eaaFootprintStreak := not na(fp) ? eaaFootprintStreak + 1 : 0
++if eaaInDates and na(fp)
++    eaaMissingFpBars += 1
++bool eaaDataOk = not eaaRequireFp or eaaFootprintStreak >= 11
++bool eaaClosedNow = strategy.closedtrades > nz(strategy.closedtrades[1], 0)
++// Liquidation/partial fills invalidate this single-position research contract.
++// Fail visibly instead of silently resetting protection on a residual position.
++if strategy.position_size != 0 and (math.abs(strategy.position_size) != eaaContracts or eaaSide == 0 or eaaClosedNow)
++    runtime.error("EAA position invariant failed (partial fill/liquidation). Export the error; this run is invalid.")
++// Immediate session closes become observable on the following calculation;
++// never inspect the following bar's extremes as if that closed trade were open.
++bool eaaExitOnCurrentBar = eaaClosedNow ? strategy.closedtrades.exit_bar_index(strategy.closedtrades - 1) == bar_index : true
++bool eaaHadExposure = eaaSide != 0 and not na(eaaSubmittedBar) and bar_index > eaaSubmittedBar and eaaExitOnCurrentBar and (strategy.position_size != 0 or eaaClosedNow)
++float eaaAuditSl = eaaHadExposure ? ctActiveSl : na
++float eaaAuditTp = eaaHadExposure ? ctActiveTp : na
++int eaaAuditSide = eaaHadExposure ? eaaSide : 0
++bool eaaBothNow = eaaHadExposure and low <= math.min(ctActiveSl, ctActiveTp) and high >= math.max(ctActiveSl, ctActiveTp)
++float eaaClosedNativeNet = na
++float eaaClosedStressNet = na
++int eaaClosedAmbiguous = 0
++int eaaClosedExitTime = na
++
++if eaaHadExposure and time > time_close[1]
++    eaaExposureGaps += 1
++if eaaBothNow
++    eaaTradeAmbiguous := true
++    // Stop-first OHLC envelope: adverse gap, then adverse stop slippage.
++    // This does NOT rewrite TradingView trades or pretend to know tick order.
++    float adverseOpen = eaaSide == 1 ? math.min(open, ctActiveSl) : math.max(open, ctActiveSl)
++    float adverseExit = adverseOpen - eaaSide * eaaStressSlip * syminfo.mintick
++    eaaStressStop := na(eaaStressStop) ? adverseExit : eaaSide == 1 ? math.min(eaaStressStop, adverseExit) : math.max(eaaStressStop, adverseExit)
++
++if not eaaSawFill and (strategy.position_size != 0 or eaaClosedNow)
++    float filledAt = strategy.position_size != 0 ? strategy.position_avg_price : strategy.closedtrades.entry_price(strategy.closedtrades - 1)
++    if eaaSide * (filledAt - ctActiveSl) <= 0 or eaaSide * (ctActiveTp - filledAt) <= 0
++        eaaGapEntries += 1
++    eaaSawFill := true
++
++if eaaClosedNow
++    if strategy.closedtrades - nz(strategy.closedtrades[1], 0) != 1
++        runtime.error("EAA single-slot invariant failed: multiple closes in one bar.")
++    int tradeNo = strategy.closedtrades - 1
++    string exitComment = strategy.closedtrades.exit_comment(tradeNo)
++    bool expectedExit = exitComment == "SL" or exitComment == "TP" or exitComment == "PAT" or exitComment == "SESSION_OR_TEST_END"
++    if math.abs(strategy.closedtrades.size(tradeNo)) != eaaContracts or eaaSide == 0 or not expectedExit
++        runtime.error("EAA closed-trade invariant failed (size/state/liquidation). This run is invalid.")
++    eaaAuditedTrades += 1
++    eaaClosedExitTime := strategy.closedtrades.exit_time(tradeNo)
++    float qty = math.abs(strategy.closedtrades.size(tradeNo))
++    float actualEntry = strategy.closedtrades.entry_price(tradeNo)
++    float actualExit = strategy.closedtrades.exit_price(tradeNo)
++    float fees = strategy.closedtrades.commission(tradeNo)
++    eaaClosedNativeNet := eaaSide * (actualExit - actualEntry) * syminfo.pointvalue * qty - fees
++    float adverseNet = eaaTradeAmbiguous ? eaaSide * (eaaStressStop - actualEntry) * syminfo.pointvalue * qty - fees : eaaClosedNativeNet
++    eaaClosedStressNet := math.min(eaaClosedNativeNet, adverseNet)
++    eaaStressNet += eaaClosedStressNet
++    eaaClosedAmbiguous := eaaTradeAmbiguous ? 1 : 0
++    eaaAmbiguousTrades += eaaClosedAmbiguous
++    eaaSameBarTrades += strategy.closedtrades.entry_bar_index(tradeNo) == strategy.closedtrades.exit_bar_index(tradeNo) ? 1 : 0
++    strategy.cancel_all()
++    ctActiveTp := na
++    ctActiveSl := na
++    ctEntryAtr := na
++    ctPeakLongProfit := 0.0
++    ctPeakShortProfit := 0.0
++    eaaSide := 0
++    eaaSubmittedBar := na
++    eaaEntryId := ""
++    eaaSawFill := false
++    eaaTradeAmbiguous := false
++    eaaStressStop := na
++
++// Margin/order rejection must not leave the single slot permanently reserved.
++bool eaaUnfilledNow = eaaSide != 0 and not na(eaaSubmittedBar) and bar_index > eaaSubmittedBar and strategy.position_size == 0 and not eaaClosedNow
++if eaaUnfilledNow
++    strategy.cancel_all()
++    eaaUnfilledOrders += 1
++    eaaSide := 0
++    eaaSubmittedBar := na
++    eaaEntryId := ""
++    ctActiveSl := na
++    ctActiveTp := na
++    ctEntryAtr := na
++    eaaTradeAmbiguous := false
++    eaaStressStop := na
++
++bool ctInLong = strategy.position_size > 0
++bool ctInShort = strategy.position_size < 0
++float ctEntryPrice = strategy.position_size != 0 ? strategy.position_avg_price : na
++int ctEntryBar = strategy.opentrades > 0 ? strategy.opentrades.entry_bar_index(0) : na
++float ctCurLongProfitAtr = ctInLong and not na(ctEntryPrice) ? (close - ctEntryPrice) / nz(ctEntryAtr, atr) : 0.0
+ float ctCurShortProfitAtr = ctInShort and not na(ctEntryPrice) ? (ctEntryPrice - close) / nz(ctEntryAtr, atr) : 0.0
+-
+-// Peak profit tracking
+ if ctInLong
+     ctPeakLongProfit := math.max(ctPeakLongProfit, ctCurLongProfitAtr)
+ if ctInShort
+     ctPeakShortProfit := math.max(ctPeakShortProfit, ctCurShortProfitAtr)
+-
+-// TP progress
+-float ctTpProgressLong  = ctInLong  and not na(ctActiveTp) and not na(ctEntryPrice) and (ctActiveTp - ctEntryPrice) > 0 ? (close - ctEntryPrice) / (ctActiveTp - ctEntryPrice) : 0.0
+-float ctTpProgressShort = ctInShort and not na(ctActiveTp) and not na(ctEntryPrice) and (ctEntryPrice - ctActiveTp) > 0 ? (ctEntryPrice - close) / (ctEntryPrice - ctActiveTp) : 0.0
++float ctTpProgressLong = ctInLong and not na(ctActiveTp) and (ctActiveTp - ctEntryPrice) > 0 ? (close - ctEntryPrice) / (ctActiveTp - ctEntryPrice) : 0.0
++float ctTpProgressShort = ctInShort and not na(ctActiveTp) and (ctEntryPrice - ctActiveTp) > 0 ? (ctEntryPrice - close) / (ctEntryPrice - ctActiveTp) : 0.0
++
++// Raw candidates, evaluated even while occupied. Their filters are unchanged.
++bool ctLongFiredThisBar = false
++bool ctShortFiredThisBar = false
++float eaaRawLongSl = na
++float eaaRawLongTp = na
++float eaaRawShortSl = na
++float eaaRawShortTp = na
++string eaaRawLongKind = ""
++string eaaRawShortKind = ""
+ 
+ // ── ENTRY GATES (shared across all CT paths) ──────────────────
+ // Must be in a trend to fade it — no CT in chop/consolidation
+@@ -1339,15 +1463,9 @@
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "FADE")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "FADE"
+             ctLongFiredThisBar := true
+ 
+ if useFade and ctGateShort and not ctShortFiredThisBar and not hurstPersist and not csDoji
+@@ -1358,15 +1476,9 @@
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "FADE")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "FADE"
+             ctShortFiredThisBar := true
+ 
+ // Priority 2: DIV — delta divergence at extreme
+@@ -1378,15 +1490,9 @@
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "DIV")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "DIV"
+             ctLongFiredThisBar := true
+ 
+ if useDiv and ctGateShort and not ctShortFiredThisBar
+@@ -1397,15 +1503,9 @@
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "DIV")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "DIV"
+             ctShortFiredThisBar := true
+ 
+ // Priority 3: TRAP — liquidity sweep against trend
+@@ -1429,15 +1529,9 @@
+         tpCand = f_ctTpLong()
+         slCand = math.min(f_ctSlLong(), low - atr * f_ctSlBuffer())  // SL beyond the sweep wick
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "TRAP")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "TRAP"
+             ctLongFiredThisBar := true
+ 
+ if useTrap and ctGateShort and not ctShortFiredThisBar
+@@ -1450,15 +1544,9 @@
+         tpCand = f_ctTpShort()
+         slCand = math.max(f_ctSlShort(), high + atr * f_ctSlBuffer())
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "TRAP")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "TRAP"
+             ctShortFiredThisBar := true
+ 
+ // Priority 4: AGG — aggressive institutional flow against trend
+@@ -1472,15 +1560,9 @@
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "AGG")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "AGG"
+             ctLongFiredThisBar := true
+ 
+ if useAgg and ctGateShort and not ctShortFiredThisBar
+@@ -1491,15 +1573,9 @@
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "AGG")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "AGG"
+             ctShortFiredThisBar := true
+ 
+ // Priority 5: ABSORB — absorption at extreme (new from research)
+@@ -1512,15 +1588,9 @@
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "ABSORB")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "ABSORB"
+             ctLongFiredThisBar := true
+ 
+ if useAbsorb and ctGateShort and not ctShortFiredThisBar
+@@ -1531,15 +1601,9 @@
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "ABSORB")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "ABSORB"
+             ctShortFiredThisBar := true
+ 
+ // Priority 6: VRZ RETEST — price returns to institutional volume zone and reacts
+@@ -1600,15 +1664,9 @@
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInLong     := true
+-            ctInShort    := false
+-            ctPeakLongProfit := 0.0
+-            f_openTicket(true, slCand, tpCand, ctConfLong, "CT BUY", "VRZ")
++            eaaRawLongSl := slCand
++            eaaRawLongTp := tpCand
++            eaaRawLongKind := "VRZ"
+             ctLongFiredThisBar := true
+ 
+ if useVrz and ctGateShort and not ctShortFiredThisBar and vrzRetestRes
+@@ -1619,58 +1677,10 @@
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+-            ctEntryPrice := close
+-            ctEntryBar   := bar_index
+-            ctEntryAtr   := atr
+-            ctActiveTp   := tpCand
+-            ctActiveSl   := slCand
+-            ctInShort    := true
+-            ctInLong     := false
+-            ctPeakShortProfit := 0.0
+-            f_openTicket(false, slCand, tpCand, ctConfShort, "CT SELL", "VRZ")
++            eaaRawShortSl := slCand
++            eaaRawShortTp := tpCand
++            eaaRawShortKind := "VRZ"
+             ctShortFiredThisBar := true
+-
+-// ── TICKET PROCESSING (SL/TP hit) ─────────────────────────────
+-bool ctTpLongHit  = false
+-bool ctTpShortHit = false
+-bool ctSlLongHit  = false
+-bool ctSlShortHit = false
+-if activeTix.size() > 0
+-    for i = activeTix.size() - 1 to 0
+-        tix = activeTix.get(i)
+-        if not tix.closed
+-            bool pastEntry = bar_index > tix.eBar
+-            bool slHit = tix.isLong ? (low <= tix.sl and pastEntry) : (high >= tix.sl and pastEntry)
+-            bool tpHit = tix.isLong ? (high >= tix.tp and pastEntry) : (low <= tix.tp and pastEntry)
+-            if slHit or tpHit
+-                tix.closed := true
+-                exitColor = tpHit ? color.new(#00FF7F, 60) : color.new(#FF4500, 60)
+-                exitText  = tpHit ? "✓ TP" : "✗ SL"
+-                exitY     = tpHit ? tix.tp : tix.sl
+-                line.delete(tix.slLn)
+-                line.delete(tix.tpLn)
+-                if tix.isLong
+-                    ctInLong := false
+-                    if tpHit
+-                        ctTpLongHit := true
+-                    if slHit
+-                        ctSlLongHit := true
+-                else
+-                    ctInShort := false
+-                    if tpHit
+-                        ctTpShortHit := true
+-                    if slHit
+-                        ctSlShortHit := true
+-                ctEntryPrice := na
+-                string ctOutcome = tpHit ? "TP" : "SL"
+-                alert("CT " + ctOutcome + " HIT @ " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
+-
+-// Ticket cleanup — remove closed tickets older than 50 bars to prevent unbounded growth
+-if activeTix.size() > 0
+-    for i = activeTix.size() - 1 to 0
+-        tix = activeTix.get(i)
+-        if tix.closed and (bar_index - tix.eBar) > 50
+-            activeTix.remove(i)
+ 
+ // ── SMART EXIT — CT-specific ──────────────────────────────────
+ // CT exits are FASTER than trend-following — wrong CT trades die quickly
+@@ -1779,44 +1789,93 @@
+ bool ctPatternExitLong  = ctExitLongScore >= f_ctExitThreshLong() and not ctProfProgressLong
+ bool ctPatternExitShort = ctExitShortScore >= f_ctExitThreshShort() and not ctProfProgressShort
+ 
+-// ── EXECUTE EXITS ─────────────────────────────────────────────
+-bool ctExitLong  = ctPatternExitLong
+-bool ctExitShort = ctPatternExitShort
+-
+-if ctInLong and ctExitLong and bar_index > ctEntryBar
+-    label.new(bar_index, high + atr * 0.5, "CT EXIT BUY", color=color.new(color.white, 100), textcolor=color.new(#FF9800, 0), style=label.style_label_down, size=size.normal)
+-    ctInLong     := false
+-    exitReason = "PAT"
+-    if activeTix.size() > 0
+-        for i = activeTix.size() - 1 to 0
+-            tix = activeTix.get(i)
+-            if not tix.closed and tix.isLong
+-                tix.closed := true
+-                line.delete(tix.slLn)
+-                line.delete(tix.tpLn)
+-    ctEntryPrice := na
+-
+-if ctInShort and ctExitShort and bar_index > ctEntryBar
+-    label.new(bar_index, low - atr * 0.5, "CT EXIT SELL", color=color.new(color.white, 100), textcolor=color.new(#FF9800, 0), style=label.style_label_up, size=size.normal)
+-    ctInShort    := false
+-    exitReason = "PAT"
+-    if activeTix.size() > 0
+-        for i = activeTix.size() - 1 to 0
+-            tix = activeTix.get(i)
+-            if not tix.closed and not tix.isLong
+-                tix.closed := true
+-                line.delete(tix.slLn)
+-                line.delete(tix.tpLn)
+-    ctEntryPrice := na
++// ── EAA REAL ORDER DISPATCH ────────────────────────────────────
++// Regular cutoff is one minute before the published 16:45 ET deadline.
++// Block new signals another minute earlier. The market entry fills next tick.
++bool eaaForceFlat = time_close >= eaaEnd or not f_eaaSessionOpen(time_close, 1004) or session.islastbar
++bool eaaTimeOk = eaaInDates and f_eaaSessionOpen(time_close, 1003) and not eaaForceFlat
++bool eaaRawAny = ctLongFiredThisBar or ctShortFiredThisBar
++bool eaaConflict = ctLongFiredThisBar and ctShortFiredThisBar
++bool eaaSlotFree = strategy.position_size == 0 and eaaSide == 0 and not eaaClosedNow and not eaaUnfilledNow
++bool eaaOrderSubmitted = false
++int eaaSubmittedModel = 0
++
++if eaaRawAny and eaaInDates
++    eaaRawSignals += 1
++    if eaaConflict
++        eaaConflicts += 1
++    else if not eaaSlotFree
++        eaaBlockedBusy += 1
++    else if not eaaTimeOk
++        eaaBlockedTime += 1
++    else if not eaaDataOk
++        eaaBlockedData += 1
++
++if barstate.isconfirmed
++    if eaaForceFlat
++        strategy.cancel_all()
++        if strategy.position_size != 0
++            strategy.close_all(comment="SESSION_OR_TEST_END", immediately=true,
++                 alert_message="EAA_CT_V1|EXIT|SESSION_OR_TEST_END")
++        // An unfilled market order can only be pending until the next tick.
++        if strategy.position_size == 0
++            eaaSide := 0
++            eaaSubmittedBar := na
++            ctActiveSl := na
++            ctActiveTp := na
++            ctEntryAtr := na
++    else
++        // Keep the same immutable absolute bracket; never recalculate from a
++        // later signal or mutate the position to an opposite candidate.
++        if strategy.position_size != 0
++            strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
++                 comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
++            if (ctInLong and ctPatternExitLong) or (ctInShort and ctPatternExitShort)
++                strategy.close(eaaEntryId, comment="PAT", alert_message="EAA_CT_V1|EXIT|PAT")
++        if eaaRawAny and not eaaConflict and eaaSlotFree and eaaTimeOk and eaaDataOk
++            bool isLongOrder = ctLongFiredThisBar
++            float rawSl = isLongOrder ? eaaRawLongSl : eaaRawShortSl
++            float rawTp = isLongOrder ? eaaRawLongTp : eaaRawShortTp
++            // Original f_openTicket safety clamp, applied once to all real levels.
++            float minSlDist = atr * f_dyn(0.8, 0.15, -0.05, -0.05, 0.05, -0.03, 0.1, -0.03, 0.4, 1.2)
++            float safeSl = isLongOrder ? math.min(rawSl, close - minSlDist) : math.max(rawSl, close + minSlDist)
++            float finalSl = isLongOrder ? f_eaaTickDown(safeSl) : f_eaaTickUp(safeSl)
++            float finalTp = isLongOrder ? f_eaaTickUp(rawTp) : f_eaaTickDown(rawTp)
++            bool validLevels = not na(finalSl) and not na(finalTp) and atr > 0 and (isLongOrder ? finalSl < close and finalTp > close : finalSl > close and finalTp < close)
++            if validLevels
++                eaaSide := isLongOrder ? 1 : -1
++                string kind = isLongOrder ? eaaRawLongKind : eaaRawShortKind
++                eaaEntryId := (isLongOrder ? "CT_L_" : "CT_S_") + kind
++                ctActiveSl := finalSl
++                ctActiveTp := finalTp
++                ctEntryAtr := atr
++                ctPeakLongProfit := 0.0
++                ctPeakShortProfit := 0.0
++                eaaSubmittedBar := bar_index
++                eaaSawFill := false
++                eaaTradeAmbiguous := false
++                eaaStressStop := na
++                eaaOrderSubmitted := true
++                eaaSubmittedModel := eaaSide * f_eaaModel(kind)
++                strategy.cancel_all()
++                strategy.entry(eaaEntryId, isLongOrder ? strategy.long : strategy.short, qty=eaaContracts,
++                     comment=eaaEntryId + "|SL=" + str.tostring(finalSl, format.mintick) + "|TP=" + str.tostring(finalTp, format.mintick),
++                     alert_message="EAA_CT_V1|ENTRY|" + eaaEntryId)
++                // Same calculation as entry: protection is not delayed until a
++                // later bar-close observes the new position.
++                strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
++                     comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
++            else
++                eaaBlockedLevels += 1
+ 
+ // ── ENTRY / EXIT PLOTSHAPES (matching main indicator style) ───
+ // ── CT INTERNAL SIGNALS (direction + entry triggers) ─────────
+ // Delta divergence — triggers DIV entry path
+-plotshape(fpDivBear, title="Δ DIV Bear", style=shape.arrowdown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="Δ DIV ▼", textcolor=color.new(color.red, 0), offset=-divLookback)
+-plotshape(fpDivBull, title="Δ DIV Bull", style=shape.arrowup,   location=location.belowbar, color=color.new(color.green, 0), size=size.tiny, text="Δ DIV ▲", textcolor=color.new(color.green, 0), offset=-divLookback)
++plotshape(fpDivBear, title="Δ DIV Bear", style=shape.arrowdown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="Δ DIV ▼", textcolor=color.new(color.red, 0), offset=0)
++plotshape(fpDivBull, title="Δ DIV Bull", style=shape.arrowup,   location=location.belowbar, color=color.new(color.green, 0), size=size.tiny, text="Δ DIV ▲", textcolor=color.new(color.green, 0), offset=0)
+ // RSI divergence — directional exhaustion, feeds confidence + DIV path
+-plotshape(bearDiv, title="RSI DIV Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="RSI ▼", textcolor=color.new(color.red, 0), offset=-divLookback)
+-plotshape(bullDiv, title="RSI DIV Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="RSI ▲", textcolor=color.new(color.green, 0), offset=-divLookback)
++plotshape(bearDiv, title="RSI DIV Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="RSI ▼", textcolor=color.new(color.red, 0), offset=0)
++plotshape(bullDiv, title="RSI DIV Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="RSI ▲", textcolor=color.new(color.green, 0), offset=0)
+ // Absorption — triggers ABSORB entry path (institutional limit orders soaking flow)
+ plotshape(absorbBull and ctLongOverextOk, title="Absorb Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="ABS ▲", textcolor=color.new(color.green, 0))
+ plotshape(absorbBear and ctShortOverextOk, title="Absorb Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="ABS ▼", textcolor=color.new(color.red, 0))
+@@ -1853,19 +1912,38 @@
+     table.cell(ctDash, 0, 1, confStr,    text_color=confCol,   text_size=size.normal)
+     table.cell(ctDash, 0, 2, overextStr, text_color=overextCol, text_size=size.normal)
+ 
+-// ── ALERTS ────────────────────────────────────────────────────
+-if ctLongFiredThisBar
+-    alert("CT BUY @ " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
+-if ctShortFiredThisBar
+-    alert("CT SELL @ " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
+-if ctExitLong
+-    alert("CT EXIT @ " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
+-if ctExitShort
+-    alert("CT EXIT @ " + str.tostring(close, "#.##"), alert.freq_once_per_bar)
+-
+-alertcondition(ctLongFiredThisBar,            title="CT BUY",              message="CT BUY @ {{close}}")
+-alertcondition(ctShortFiredThisBar,           title="CT SELL",             message="CT SELL @ {{close}}")
+-alertcondition(ctTpLongHit or ctTpShortHit,   title="CT TP Hit",           message="CT TP HIT @ {{close}}")
+-alertcondition(ctSlLongHit or ctSlShortHit,   title="CT SL Hit",           message="CT SL HIT @ {{close}}")
+-alertcondition(ctExitLong,                    title="CT Smart Exit: BUY",  message="CT EXIT BUY @ {{close}}")
+-alertcondition(ctExitShort,                   title="CT Smart Exit: SELL", message="CT EXIT SELL @ {{close}}")
++// ── EAA DIAGNOSTICS / EXPORT FIELDS ────────────────────────────
++// TV native orders are the sole execution book. The stress ledger uses the same
++// accepted trades, repriced adversely; it is NOT an alternate strategy replay,
++// an intraday equity curve, a funded simulation, or a guaranteed performance bound.
++plot(eaaAuditSl, "EAA audit SL", display=display.data_window)
++plot(eaaAuditTp, "EAA audit TP", display=display.data_window)
++plot(eaaAuditSide, "EAA audit side", display=display.data_window)
++plot(eaaBothNow ? 1 : 0, "EAA both levels in bar", display=display.data_window)
++plot(eaaClosedNativeNet, "EAA closed native net", display=display.data_window)
++plot(eaaClosedStressNet, "EAA closed stress net", display=display.data_window)
++plot(eaaClosedAmbiguous, "EAA closed ambiguous", display=display.data_window)
++plot(eaaClosedExitTime, "EAA closed exit time ms", display=display.data_window)
++plot(eaaStressNet, "EAA cumulative stress net", display=display.data_window)
++plot(eaaSubmittedModel, "EAA submitted model 1-6 signed", display=display.data_window)
++plot(ctLongFiredThisBar ? f_eaaModel(eaaRawLongKind) : ctShortFiredThisBar ? -f_eaaModel(eaaRawShortKind) : 0, "EAA raw model 1-6 signed", display=display.data_window)
++plot(not na(fp) ? 1 : 0, "EAA footprint present", display=display.data_window)
++plot(strategy.closedtrades, "EAA closed trade count", display=display.data_window)
++plot(eaaSide != 0 ? ctActiveSl : na, "EAA active SL", color=color.red, style=plot.style_linebr)
++plot(eaaSide != 0 ? ctActiveTp : na, "EAA active TP", color=color.green, style=plot.style_linebr)
++
++if barstate.islast
++    var table eaaQa = table.new(position.top_right, 1, 9, bgcolor=color.new(color.black, 15))
++    table.cell(eaaQa, 0, 0, "EAA CT V1 | RESEARCH / HTF repaint risk", text_color=color.orange, text_size=size.small)
++    table.cell(eaaQa, 0, 1, "Closed/audited " + str.tostring(strategy.closedtrades) + "/" + str.tostring(eaaAuditedTrades) + " | same-bar " + str.tostring(eaaSameBarTrades), text_color=color.white, text_size=size.small)
++    table.cell(eaaQa, 0, 2, "Ambiguous trades " + str.tostring(eaaAmbiguousTrades) + " | gap entries " + str.tostring(eaaGapEntries), text_color=color.yellow, text_size=size.small)
++    table.cell(eaaQa, 0, 3, "Stop-first stress net " + str.tostring(eaaStressNet, "#.##") + " USD", text_color=color.white, text_size=size.small)
++    table.cell(eaaQa, 0, 4, "Missing FP bars " + str.tostring(eaaMissingFpBars) + " | data blocks " + str.tostring(eaaBlockedData), text_color=color.yellow, text_size=size.small)
++    table.cell(eaaQa, 0, 5, "Raw " + str.tostring(eaaRawSignals) + " | busy blocks " + str.tostring(eaaBlockedBusy), text_color=color.white, text_size=size.small)
++    table.cell(eaaQa, 0, 6, "Time blocks " + str.tostring(eaaBlockedTime) + " | level blocks " + str.tostring(eaaBlockedLevels), text_color=color.white, text_size=size.small)
++    table.cell(eaaQa, 0, 7, "Gaps " + str.tostring(eaaExposureGaps) + " | conflicts " + str.tostring(eaaConflicts) + " | unfilled " + str.tostring(eaaUnfilledOrders), text_color=color.yellow, text_size=size.small)
++    table.cell(eaaQa, 0, 8, "Smart exits disabled IN ORIGINAL | no live approval", text_color=color.orange, text_size=size.small)
++
++// Use strategy ORDER-FILL alerts for actual simulated fills. Original indicator
++// alert()/alertcondition() tickets were removed to avoid false/duplicate orders.
++// Messages are diagnostic identifiers, NOT a configured Tradovate webhook.

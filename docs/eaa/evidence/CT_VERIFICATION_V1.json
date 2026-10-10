@@ -1,0 +1,90 @@
+{
+  "executed_at_utc": "2026-10-10T15:12:00.482174+00:00",
+  "python": "3.12.14",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.39",
+  "all_passed": true,
+  "unittest_count": 87,
+  "ct_test_methods": 37,
+  "static_contracts": 25,
+  "commands": [
+    {
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "-m",
+        "compileall",
+        "-q",
+        "eaa"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/bin/python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "tests/eaa",
+        "-v"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": "test_delayed_immediate_close_not_following_bar (test_ct.CTAuditTimingTests.test_delayed_immediate_close_not_following_bar) ... ok\ntest_open_position_and_same_bar_roundtrip_audited (test_ct.CTAuditTimingTests.test_open_position_and_same_bar_roundtrip_audited) ... ok\ntest_rejected_unfilled_order_not_exposure (test_ct.CTAuditTimingTests.test_rejected_unfilled_order_not_exposure) ... ok\ntest_signal_bar_never_audited (test_ct.CTAuditTimingTests.test_signal_bar_never_audited) ... ok\ntest_exact_touch_in_adverse_oracle (test_ct.CTExitTests.test_exact_touch_in_adverse_oracle) ... ok\ntest_invalid_stress_quantity_rejected (test_ct.CTExitTests.test_invalid_stress_quantity_rejected) ... ok\ntest_long_adverse_gap (test_ct.CTExitTests.test_long_adverse_gap) ... ok\ntest_long_both_levels_stop_first (test_ct.CTExitTests.test_long_both_levels_stop_first) ... ok\ntest_neither_level_no_exit (test_ct.CTExitTests.test_neither_level_no_exit) ... ok\ntest_non_ambiguous_stress_equals_native (test_ct.CTExitTests.test_non_ambiguous_stress_equals_native) ... ok\ntest_short_adverse_gap (test_ct.CTExitTests.test_short_adverse_gap) ... ok\ntest_short_both_levels_stop_first (test_ct.CTExitTests.test_short_both_levels_stop_first) ... ok\ntest_stress_never_masks_worse_actual_loss (test_ct.CTExitTests.test_stress_never_masks_worse_actual_loss) ... ok\ntest_stress_reprices_winner_with_fees_and_qty (test_ct.CTExitTests.test_stress_reprices_winner_with_fees_and_qty) ... ok\ntest_target_gap_receives_no_beneficial_price (test_ct.CTExitTests.test_target_gap_receives_no_beneficial_price) ... ok\ntest_bad_inputs_rejected (test_ct.CTLevelTests.test_bad_inputs_rejected) ... ok\ntest_existing_wider_stop_not_tightened (test_ct.CTLevelTests.test_existing_wider_stop_not_tightened) ... ok\ntest_invalid_ohlc_rejected (test_ct.CTLevelTests.test_invalid_ohlc_rejected) ... ok\ntest_long_original_minimum_stop_and_outward_tick (test_ct.CTLevelTests.test_long_original_minimum_stop_and_outward_tick) ... ok\ntest_negative_prices_round_correctly (test_ct.CTLevelTests.test_negative_prices_round_correctly) ... ok\ntest_short_original_minimum_stop_and_outward_tick (test_ct.CTLevelTests.test_short_original_minimum_stop_and_outward_tick) ... ok\ntest_dst_uses_new_york_not_fixed_utc_offset (test_ct.CTSessionTests.test_dst_uses_new_york_not_fixed_utc_offset) ... ok\ntest_naive_datetime_rejected (test_ct.CTSessionTests.test_naive_datetime_rejected) ... ok\ntest_regular_cutoff_entry_buffer_and_reopen (test_ct.CTSessionTests.test_regular_cutoff_entry_buffer_and_reopen) ... ok\ntest_weekend_closure (test_ct.CTSessionTests.test_weekend_closure) ... ok\ntest_all_six_models_both_directions_survive_dispatch (test_ct.CTSlotTests.test_all_six_models_both_directions_survive_dispatch) ... ok\ntest_busy_blocks_reversal_and_repricing (test_ct.CTSlotTests.test_busy_blocks_reversal_and_repricing) ... ok\ntest_cancel_pending_prevents_later_fill (test_ct.CTSlotTests.test_cancel_pending_prevents_later_fill) ... ok\ntest_data_and_session_blocks (test_ct.CTSlotTests.test_data_and_session_blocks) ... ok\ntest_next_bar_entry_and_same_bar_stop (test_ct.CTSlotTests.test_next_bar_entry_and_same_bar_stop) ... ok\ntest_no_reentry_on_exit_bar (test_ct.CTSlotTests.test_no_reentry_on_exit_bar) ... ok\ntest_no_signal_bar_fill (test_ct.CTSlotTests.test_no_signal_bar_fill) ... ok\ntest_opposite_candidates_rejected (test_ct.CTSlotTests.test_opposite_candidates_rejected) ... ok\ntest_priority_is_source_order (test_ct.CTSlotTests.test_priority_is_source_order) ... ok\ntest_session_close_for_open_position (test_ct.CTSlotTests.test_session_close_for_open_position) ... ok\ntest_all_source_contracts (test_ct.CTSourceTests.test_all_source_contracts) ... ok\ntest_scanner_ignores_comments_strings_and_escapes (test_ct.CTSourceTests.test_scanner_ignores_comments_strings_and_escapes) ... ok\ntest_bootstrap_seed_reproducible (test_funded.FundedTests.test_bootstrap_seed_reproducible) ... ok\ntest_calendar_counts_zero_trade_days (test_funded.FundedTests.test_calendar_counts_zero_trade_days) ... ok\ntest_calendar_missing_trade_fails (test_funded.FundedTests.test_calendar_missing_trade_fails) ... ok\ntest_closed_only_never_certified (test_funded.FundedTests.test_closed_only_never_certified) ... ok\ntest_configuration_rejects_negative_costs (test_funded.FundedTests.test_configuration_rejects_negative_costs) ... ok\ntest_consistency_blocks_one_big_day (test_funded.FundedTests.test_consistency_blocks_one_big_day) ... ok\ntest_consistency_denominator_includes_losses (test_funded.FundedTests.test_consistency_denominator_includes_losses) ... ok\ntest_cutoff_entry_blocked_exit_allowed (test_funded.FundedTests.test_cutoff_entry_blocked_exit_allowed) ... ok\ntest_dll_hard_fail_is_explicit_profile (test_funded.FundedTests.test_dll_hard_fail_is_explicit_profile) ... ok\ntest_dll_is_day_lock_not_account_fail (test_funded.FundedTests.test_dll_is_day_lock_not_account_fail) ... ok\ntest_duplicate_ids_rejected (test_funded.FundedTests.test_duplicate_ids_rejected) ... ok\ntest_eod_high_water_never_decreases (test_funded.FundedTests.test_eod_high_water_never_decreases) ... ok\ntest_eod_trail_does_not_follow_open_high (test_funded.FundedTests.test_eod_trail_does_not_follow_open_high) ... ok\ntest_exit_fee_can_cause_breach (test_funded.FundedTests.test_exit_fee_can_cause_breach) ... ok\ntest_friday_evening_and_saturday_blocked (test_funded.FundedTests.test_friday_evening_and_saturday_blocked) ... ok\ntest_full_round_trip_cost (test_funded.FundedTests.test_full_round_trip_cost) ... ok\ntest_gap_through_both_limits_is_mll (test_funded.FundedTests.test_gap_through_both_limits_is_mll) ... ok\ntest_insufficient_bootstrap_fails (test_funded.FundedTests.test_insufficient_bootstrap_fails) ... ok\ntest_integer_sizing_rounds_down (test_funded.FundedTests.test_integer_sizing_rounds_down) ... ok\ntest_intraday_winner_can_fail (test_funded.FundedTests.test_intraday_winner_can_fail) ... ok\ntest_invalid_sample_order_rejected (test_funded.FundedTests.test_invalid_sample_order_rejected) ... ok\ntest_lock_at_initial_plus_100 (test_funded.FundedTests.test_lock_at_initial_plus_100) ... ok\ntest_mae_proxy_can_find_breach (test_funded.FundedTests.test_mae_proxy_can_find_breach) ... ok\ntest_max_contract_limit (test_funded.FundedTests.test_max_contract_limit) ... ok\ntest_no_partial_rolling_windows (test_funded.FundedTests.test_no_partial_rolling_windows) ... ok\ntest_nonfinite_rejected (test_funded.FundedTests.test_nonfinite_rejected) ... ok\ntest_offtick_rejected (test_funded.FundedTests.test_offtick_rejected) ... ok\ntest_overlaps_rejected (test_funded.FundedTests.test_overlaps_rejected) ... ok\ntest_overnight_rejected (test_funded.FundedTests.test_overnight_rejected) ... ok\ntest_pass_three_balanced_days (test_funded.FundedTests.test_pass_three_balanced_days) ... ok\ntest_previous_day_floor_applies_intraday (test_funded.FundedTests.test_previous_day_floor_applies_intraday) ... ok\ntest_profit_liquidation_not_clipped (test_funded.FundedTests.test_profit_liquidation_not_clipped) ... ok\ntest_realized_profit_stop_does_not_use_open_high (test_funded.FundedTests.test_realized_profit_stop_does_not_use_open_high) ... ok\ntest_short_price_direction (test_funded.FundedTests.test_short_price_direction) ... ok\ntest_size_below_one_skips_not_rounds_up (test_funded.FundedTests.test_size_below_one_skips_not_rounds_up) ... ok\ntest_sizing_requires_entry_stop (test_funded.FundedTests.test_sizing_requires_entry_stop) ... ok\ntest_sunday_reopen_is_monday_session (test_funded.FundedTests.test_sunday_reopen_is_monday_session) ... ok\ntest_touch_mll_is_fail (test_funded.FundedTests.test_touch_mll_is_fail) ... ok\ntest_dst_fall_ambiguous_rejected (test_io.ImportTests.test_dst_fall_ambiguous_rejected) ... ok\ntest_dst_spring_missing_rejected (test_io.ImportTests.test_dst_spring_missing_rejected) ... ok\ntest_explicit_offset_supported (test_io.ImportTests.test_explicit_offset_supported) ... ok\ntest_locale_not_guessed (test_io.ImportTests.test_locale_not_guessed) ... ok\ntest_native_schema (test_io.ImportTests.test_native_schema) ... ok\ntest_ohlc_adverse_before_favorable (test_io.ImportTests.test_ohlc_adverse_before_favorable) ... ok\ntest_ohlc_gap_fails (test_io.ImportTests.test_ohlc_gap_fails) ... ok\ntest_open_trade_rejected (test_io.ImportTests.test_open_trade_rejected) ... ok\ntest_paired_tv_rows_reverse_order (test_io.ImportTests.test_paired_tv_rows_reverse_order) ... ok\ntest_paths_require_all_ids (test_io.ImportTests.test_paths_require_all_ids) ... ok\ntest_timezone_required (test_io.ImportTests.test_timezone_required) ... ok\ntest_source_invariants_not_compilation (test_pine_static.PineStaticTests.test_source_invariants_not_compilation) ... ok\n\n----------------------------------------------------------------------\nRan 87 tests in 0.087s\n\nOK\n"
+    }
+  ],
+  "static": {
+    "checks": {
+      "uploaded_original_sha256": true,
+      "uploaded_original_size_lines": true,
+      "complete_source_sentinels": true,
+      "deterministic_build": true,
+      "all_original_inputs_exact": true,
+      "entire_feature_pipeline_unchanged": true,
+      "entire_candidate_logic_unchanged": true,
+      "all_six_models_both_directions_same_priority": true,
+      "smart_exit_logic_exact": true,
+      "smart_exit_still_disabled": true,
+      "single_original_footprint_call": true,
+      "visuals_only_confirmation_offset_changed": true,
+      "no_virtual_ticket_or_indicator_alerts": true,
+      "one_actual_entry_dispatch": true,
+      "single_slot_and_no_reversal": true,
+      "entry_bracket_same_calculation": true,
+      "next_tick_bar_close_calculation": true,
+      "cancel_and_immediate_session_flat": true,
+      "data_guard_enabled": true,
+      "rejects_partial_positions": true,
+      "unfilled_not_exposure": true,
+      "delayed_session_exit_not_next_bar_exposure": true,
+      "stress_cannot_improve_same_trade_native_net": true,
+      "no_negative_history_index": true,
+      "balanced_delimiters_not_compilation": true
+    },
+    "source_sha256": "9fa2463f2b27ae54554ea24290c38b9cd068ac240b61da7ca7b7cf44feed2b30",
+    "strategy_sha256": "c386f4f7d3e30e3ebfe57ebe5e35e40c5560fda88b7f38296405d080ebbcf8e8",
+    "source_bytes": 110723,
+    "strategy_bytes": 118129,
+    "source_lines": 1871,
+    "strategy_lines": 1949,
+    "original_input_count": 20,
+    "plot_calls": 34,
+    "request_calls": 10,
+    "pine_compiled": false,
+    "tradingview_run": false,
+    "signal_parity_on_market_data_verified": false
+  },
+  "limitations": [
+    "Python tests exercise a synthetic contract oracle, NOT the Pine runtime.",
+    "Text identity does NOT verify actual signal parity or historical performance.",
+    "Native TradingView bracket order is not globally stop-first.",
+    "No TradingView compilation, execution, signal comparison or export was performed."
+  ],
+  "ct_implementation_hashes": {
+    "eaa/ct_templates/diagnostics.pinefrag": "09c2cd21f5390905d6aeec304346fcd84c5729c80a80832cb27095cabc2c4642",
+    "eaa/ct_templates/dispatch.pinefrag": "07e25ed1446ffdeccacfbe0276f9b24b2c757440af8e086e0b9d442287b9a2eb",
+    "eaa/ct_templates/header.pinefrag": "8114ce474309f08c7402c1b86830d9f5076098141f2fb24f96987cc39ec75531",
+    "eaa/ct_templates/state.pinefrag": "0adb01a759d57d391b93575b86efbad49cce8493ec6995de61b7a3dcdeb2aa19"
+  }
+}
