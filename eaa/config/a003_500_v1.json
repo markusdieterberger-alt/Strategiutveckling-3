@@ -1,0 +1,8 @@
+{
+  "name": "A003_500_REALIZED_STOP_COMPARISON_NOT_FIRM_CERTIFIED",
+  "daily_loss": 600,
+  "dll_action": "lock_day",
+  "daily_profit": 500,
+  "profit_action": "block_new",
+  "consistency": 0.5
+}

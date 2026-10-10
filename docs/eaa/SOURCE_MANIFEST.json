@@ -1,0 +1,26 @@
+{
+  "retrieved_date": "2026-10-09",
+  "hma": {
+    "url": "https://www.tradingview.com/script/pjZmjlZB-NQ-HMA-Midday-Strategy/",
+    "author": "QuantByBoji",
+    "pine_id": "PUB;f519c1242fb945e5b86b0cc06a3a2d1e",
+    "version": "1.0",
+    "source_updated": "2026-05-08T15:25:09.857423Z",
+    "original_sha256": "67314fc9fd9c5925f4f382922939c6d6d4a60495ff4abadd6d0921d673909a1b",
+    "original_bytes": 6984,
+    "original_lines": 189,
+    "source_origin": "Full public source, unmodified bytes; private chat byte identity not verified"
+  },
+  "ct": {
+    "url": "https://www.tradingview.com/script/1kEKmbb9-NQ-MNQ-CT-Scalper-BACKTEST/",
+    "author": "Crispigino",
+    "pine_id": "PUB;867afbc0326d4786827e49eac073f5d7",
+    "version": "1.0",
+    "source_updated": "2026-04-21T07:17:50.458435Z",
+    "reference_sha256": "32f2d59481f38db304aa209e0f1b8d236291bc523dc7e67773135226a94c8959",
+    "reference_bytes": 118027,
+    "reference_lines": 1927,
+    "requested_indicator_recovered": false,
+    "warning": "Public BACKTEST is already strategy(), pyramiding=20, smart exits disabled. Not an identity substitute for the requested indicator. No conversion delivered."
+  }
+}

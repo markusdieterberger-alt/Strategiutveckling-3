@@ -1,0 +1,1786 @@
+{
+  "version": "1.0.0",
+  "rules": {
+    "name": "EAA_PROJECT_550_V1_NOT_FIRM_CERTIFIED",
+    "target": 1250,
+    "drawdown": 1000,
+    "trail_lock_profit": 100,
+    "daily_loss": 600,
+    "dll_action": "lock_day",
+    "daily_profit": 550,
+    "profit_action": "liquidate",
+    "consistency": 0.5,
+    "max_contracts": 20,
+    "point_value": 2.0,
+    "tick_size": 0.25,
+    "commission_rt": 1,
+    "additional_slippage_ticks_side": 0,
+    "other_cost_rt": 0.0,
+    "timezone": "America/New_York",
+    "reopen": "18:00",
+    "cutoff": "16:45"
+  },
+  "inputs_sha256": {
+    "eaa/fixtures/synthetic_trades.csv": "6e5ee0aef462c4cdc967558cd9035ebf50adcf8f65699563ef03f5aae7ae96d9",
+    "eaa/fixtures/synthetic_calendar.csv": "9c1bb032c7fb407bf2d1cdedf0c14656fdba5048bda046a191597583617455cf",
+    "eaa/config/project_550_v1.json": "a15ab32ff9716dbd27acc39fe8add98237b9fabf1d88be3ff2779ec5968ca2f6",
+    "eaa/fixtures/synthetic_paths.csv": "5998e7a744d1e926b6d22d815cd5efaeb71263913b1a5febcfd1054ae886f553"
+  },
+  "horizon": 15,
+  "seed": 20261009,
+  "bootstrap_block": 5,
+  "source_trades": 34,
+  "session_count": 40,
+  "best_examined_contracts": 4,
+  "selection_status": "EXPLORATORY_IN_SAMPLE_NOT_OPTIMAL_OR_APPROVED",
+  "approximate": true,
+  "rules_verified": false,
+  "assumptions": [
+    "EOD pass; strict 50% consistency without provider cushion",
+    "No holiday/early-close certification; explicit calendar still required",
+    "America/New_York is a modeling timezone, not proof of provider EST/DST interpretation",
+    "Prices already include exported fills; additional slippage is incremental",
+    "Filtering/liquidation does not regenerate signals absent from the original export",
+    "Intraday paths are sampled; gaps and unknown fill order remain",
+    "Profit stop is an observed liquidation trigger, never a guaranteed maximum; overshoot retained"
+  ],
+  "scenarios": [
+    {
+      "contracts_cap": 1,
+      "additional_slippage_ticks_side": 0.0,
+      "commission_rt": 1.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "ALIVE",
+        "days": 15,
+        "net": 558.0,
+        "floor": -442.0,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 79.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 79.0,
+            "floor": -921.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 158.0,
+            "floor": -921.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 158.0,
+            "floor": -842.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 237.0,
+            "floor": -842.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 237.0,
+            "floor": -763.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 186.0,
+            "floor": -763.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -51.0,
+            "net": 186.0,
+            "floor": -763.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 265.0,
+            "floor": -763.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 265.0,
+            "floor": -735.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 344.0,
+            "floor": -735.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 344.0,
+            "floor": -656.0
+          },
+          {
+            "day": "2026-01-14",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 344.0,
+            "floor": -656.0
+          },
+          {
+            "day": "2026-01-15",
+            "id": "SYNTHETIC-008",
+            "time": "2026-01-15T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 293.0,
+            "floor": -656.0
+          },
+          {
+            "day": "2026-01-15",
+            "event": "EOD",
+            "day_net": -51.0,
+            "net": 293.0,
+            "floor": -656.0
+          },
+          {
+            "day": "2026-01-16",
+            "id": "SYNTHETIC-009",
+            "time": "2026-01-16T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 372.0,
+            "floor": -656.0
+          },
+          {
+            "day": "2026-01-16",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 372.0,
+            "floor": -628.0
+          },
+          {
+            "day": "2026-01-19",
+            "id": "SYNTHETIC-010",
+            "time": "2026-01-19T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 451.0,
+            "floor": -628.0
+          },
+          {
+            "day": "2026-01-19",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 451.0,
+            "floor": -549.0
+          },
+          {
+            "day": "2026-01-20",
+            "id": "SYNTHETIC-011",
+            "time": "2026-01-20T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 530.0,
+            "floor": -549.0
+          },
+          {
+            "day": "2026-01-20",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 530.0,
+            "floor": -470.0
+          },
+          {
+            "day": "2026-01-21",
+            "id": "SYNTHETIC-012",
+            "time": "2026-01-21T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 479.0,
+            "floor": -470.0
+          },
+          {
+            "day": "2026-01-21",
+            "event": "EOD",
+            "day_net": -51.0,
+            "net": 479.0,
+            "floor": -470.0
+          },
+          {
+            "day": "2026-01-22",
+            "id": "SYNTHETIC-013",
+            "time": "2026-01-22T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 558.0,
+            "floor": -470.0
+          },
+          {
+            "day": "2026-01-22",
+            "event": "EOD",
+            "day_net": 79.0,
+            "net": 558.0,
+            "floor": -442.0
+          },
+          {
+            "day": "2026-01-23",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 558.0,
+            "floor": -442.0
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 1,
+      "additional_slippage_ticks_side": 0.0,
+      "commission_rt": 2.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "ALIVE",
+        "days": 15,
+        "net": 546.0,
+        "floor": -454.0,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 78.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 78.0,
+            "floor": -922.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 156.0,
+            "floor": -922.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 156.0,
+            "floor": -844.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 234.0,
+            "floor": -844.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 234.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 182.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 182.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 260.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 260.0,
+            "floor": -740.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 338.0,
+            "floor": -740.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 338.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-14",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 338.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-15",
+            "id": "SYNTHETIC-008",
+            "time": "2026-01-15T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 286.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-15",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 286.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-16",
+            "id": "SYNTHETIC-009",
+            "time": "2026-01-16T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 364.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-16",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 364.0,
+            "floor": -636.0
+          },
+          {
+            "day": "2026-01-19",
+            "id": "SYNTHETIC-010",
+            "time": "2026-01-19T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 442.0,
+            "floor": -636.0
+          },
+          {
+            "day": "2026-01-19",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 442.0,
+            "floor": -558.0
+          },
+          {
+            "day": "2026-01-20",
+            "id": "SYNTHETIC-011",
+            "time": "2026-01-20T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 520.0,
+            "floor": -558.0
+          },
+          {
+            "day": "2026-01-20",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 520.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-21",
+            "id": "SYNTHETIC-012",
+            "time": "2026-01-21T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 468.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-21",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 468.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-22",
+            "id": "SYNTHETIC-013",
+            "time": "2026-01-22T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 546.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-22",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 546.0,
+            "floor": -454.0
+          },
+          {
+            "day": "2026-01-23",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 546.0,
+            "floor": -454.0
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 1,
+      "additional_slippage_ticks_side": 1.0,
+      "commission_rt": 1.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "ALIVE",
+        "days": 15,
+        "net": 546.0,
+        "floor": -454.0,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 78.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 78.0,
+            "floor": -922.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 156.0,
+            "floor": -922.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 156.0,
+            "floor": -844.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 234.0,
+            "floor": -844.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 234.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 182.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 182.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 260.0,
+            "floor": -766.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 260.0,
+            "floor": -740.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 338.0,
+            "floor": -740.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 338.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-14",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 338.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-15",
+            "id": "SYNTHETIC-008",
+            "time": "2026-01-15T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 286.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-15",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 286.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-16",
+            "id": "SYNTHETIC-009",
+            "time": "2026-01-16T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 364.0,
+            "floor": -662.0
+          },
+          {
+            "day": "2026-01-16",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 364.0,
+            "floor": -636.0
+          },
+          {
+            "day": "2026-01-19",
+            "id": "SYNTHETIC-010",
+            "time": "2026-01-19T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 442.0,
+            "floor": -636.0
+          },
+          {
+            "day": "2026-01-19",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 442.0,
+            "floor": -558.0
+          },
+          {
+            "day": "2026-01-20",
+            "id": "SYNTHETIC-011",
+            "time": "2026-01-20T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 520.0,
+            "floor": -558.0
+          },
+          {
+            "day": "2026-01-20",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 520.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-21",
+            "id": "SYNTHETIC-012",
+            "time": "2026-01-21T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 468.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-21",
+            "event": "EOD",
+            "day_net": -52.0,
+            "net": 468.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-22",
+            "id": "SYNTHETIC-013",
+            "time": "2026-01-22T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 546.0,
+            "floor": -480.0
+          },
+          {
+            "day": "2026-01-22",
+            "event": "EOD",
+            "day_net": 78.0,
+            "net": 546.0,
+            "floor": -454.0
+          },
+          {
+            "day": "2026-01-23",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 546.0,
+            "floor": -454.0
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 1,
+      "additional_slippage_ticks_side": 1.0,
+      "commission_rt": 2.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 0.0,
+        "fail_pct": 0.0,
+        "alive_pct": 100.0,
+        "median_days_to_pass": null,
+        "pass_within": {
+          "5": 0.0,
+          "10": 0.0,
+          "15": 0.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "ALIVE",
+        "days": 15,
+        "net": 534.0,
+        "floor": -466.0,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 77.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 77.0,
+            "floor": -923.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 154.0,
+            "floor": -923.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 154.0,
+            "floor": -846.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 231.0,
+            "floor": -846.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 231.0,
+            "floor": -769.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 178.0,
+            "floor": -769.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -53.0,
+            "net": 178.0,
+            "floor": -769.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 255.0,
+            "floor": -769.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 255.0,
+            "floor": -745.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 332.0,
+            "floor": -745.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 332.0,
+            "floor": -668.0
+          },
+          {
+            "day": "2026-01-14",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 332.0,
+            "floor": -668.0
+          },
+          {
+            "day": "2026-01-15",
+            "id": "SYNTHETIC-008",
+            "time": "2026-01-15T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 279.0,
+            "floor": -668.0
+          },
+          {
+            "day": "2026-01-15",
+            "event": "EOD",
+            "day_net": -53.0,
+            "net": 279.0,
+            "floor": -668.0
+          },
+          {
+            "day": "2026-01-16",
+            "id": "SYNTHETIC-009",
+            "time": "2026-01-16T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 356.0,
+            "floor": -668.0
+          },
+          {
+            "day": "2026-01-16",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 356.0,
+            "floor": -644.0
+          },
+          {
+            "day": "2026-01-19",
+            "id": "SYNTHETIC-010",
+            "time": "2026-01-19T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 433.0,
+            "floor": -644.0
+          },
+          {
+            "day": "2026-01-19",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 433.0,
+            "floor": -567.0
+          },
+          {
+            "day": "2026-01-20",
+            "id": "SYNTHETIC-011",
+            "time": "2026-01-20T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 510.0,
+            "floor": -567.0
+          },
+          {
+            "day": "2026-01-20",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 510.0,
+            "floor": -490.0
+          },
+          {
+            "day": "2026-01-21",
+            "id": "SYNTHETIC-012",
+            "time": "2026-01-21T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 457.0,
+            "floor": -490.0
+          },
+          {
+            "day": "2026-01-21",
+            "event": "EOD",
+            "day_net": -53.0,
+            "net": 457.0,
+            "floor": -490.0
+          },
+          {
+            "day": "2026-01-22",
+            "id": "SYNTHETIC-013",
+            "time": "2026-01-22T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 1,
+            "net": 534.0,
+            "floor": -490.0
+          },
+          {
+            "day": "2026-01-22",
+            "event": "EOD",
+            "day_net": 77.0,
+            "net": 534.0,
+            "floor": -466.0
+          },
+          {
+            "day": "2026-01-23",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 534.0,
+            "floor": -466.0
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 4,
+      "additional_slippage_ticks_side": 0.0,
+      "commission_rt": 1.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 9.0,
+        "pass_within": {
+          "5": 3.8461538461538463,
+          "10": 92.3076923076923,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 7.0,
+        "pass_within": {
+          "5": 10.0,
+          "10": 86.66666666666667,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "PASS",
+        "days": 7,
+        "net": 1376.0,
+        "floor": 100,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 316.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 316.0,
+            "net": 316.0,
+            "floor": -684.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 632.0,
+            "floor": -684.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 316.0,
+            "net": 632.0,
+            "floor": -368.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 948.0,
+            "floor": -368.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 316.0,
+            "net": 948.0,
+            "floor": -52.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 744.0,
+            "floor": -52.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -204.0,
+            "net": 744.0,
+            "floor": -52.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1060.0,
+            "floor": -52.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 316.0,
+            "net": 1060.0,
+            "floor": 60.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1376.0,
+            "floor": 60.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 316.0,
+            "net": 1376.0,
+            "floor": 100
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 4,
+      "additional_slippage_ticks_side": 0.0,
+      "commission_rt": 2.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 9.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 80.76923076923077,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 7.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 76.66666666666667,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "PASS",
+        "days": 7,
+        "net": 1352.0,
+        "floor": 100,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 312.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 312.0,
+            "floor": -688.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 624.0,
+            "floor": -688.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 624.0,
+            "floor": -376.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 936.0,
+            "floor": -376.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 936.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 728.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -208.0,
+            "net": 728.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1040.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 1040.0,
+            "floor": 40.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1352.0,
+            "floor": 40.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 1352.0,
+            "floor": 100
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 4,
+      "additional_slippage_ticks_side": 1.0,
+      "commission_rt": 1.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 9.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 80.76923076923077,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 7.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 76.66666666666667,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "PASS",
+        "days": 7,
+        "net": 1352.0,
+        "floor": 100,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 312.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 312.0,
+            "floor": -688.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 624.0,
+            "floor": -688.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 624.0,
+            "floor": -376.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 936.0,
+            "floor": -376.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 936.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 728.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -208.0,
+            "net": 728.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1040.0,
+            "floor": -64.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 1040.0,
+            "floor": 40.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1352.0,
+            "floor": 40.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 312.0,
+            "net": 1352.0,
+            "floor": 100
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    },
+    {
+      "contracts_cap": 4,
+      "additional_slippage_ticks_side": 1.0,
+      "commission_rt": 2.0,
+      "summary": {
+        "windows": 26,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 9.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 80.76923076923077,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "bootstrap": {
+        "windows": 30,
+        "pass_pct": 100.0,
+        "fail_pct": 0.0,
+        "alive_pct": 0.0,
+        "median_days_to_pass": 7.0,
+        "pass_within": {
+          "5": 0.0,
+          "10": 76.66666666666667,
+          "15": 100.0
+        },
+        "failures": {},
+        "dll_lock_events": 0,
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false,
+        "warning": "Overlapping windows are dependent. Conditional trade replay; no live probability or signal-regeneration claim."
+      },
+      "first_window_trace": {
+        "status": "PASS",
+        "days": 7,
+        "net": 1328.0,
+        "floor": 100,
+        "failure": null,
+        "events": [
+          {
+            "day": "2026-01-05",
+            "event": "EOD",
+            "day_net": 0.0,
+            "net": 0.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "id": "SYNTHETIC-001",
+            "time": "2026-01-06T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 308.0,
+            "floor": -1000
+          },
+          {
+            "day": "2026-01-06",
+            "event": "EOD",
+            "day_net": 308.0,
+            "net": 308.0,
+            "floor": -692.0
+          },
+          {
+            "day": "2026-01-07",
+            "id": "SYNTHETIC-002",
+            "time": "2026-01-07T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 616.0,
+            "floor": -692.0
+          },
+          {
+            "day": "2026-01-07",
+            "event": "EOD",
+            "day_net": 308.0,
+            "net": 616.0,
+            "floor": -384.0
+          },
+          {
+            "day": "2026-01-08",
+            "id": "SYNTHETIC-003",
+            "time": "2026-01-08T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 924.0,
+            "floor": -384.0
+          },
+          {
+            "day": "2026-01-08",
+            "event": "EOD",
+            "day_net": 308.0,
+            "net": 924.0,
+            "floor": -76.0
+          },
+          {
+            "day": "2026-01-09",
+            "id": "SYNTHETIC-004",
+            "time": "2026-01-09T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 712.0,
+            "floor": -76.0
+          },
+          {
+            "day": "2026-01-09",
+            "event": "EOD",
+            "day_net": -212.0,
+            "net": 712.0,
+            "floor": -76.0
+          },
+          {
+            "day": "2026-01-12",
+            "id": "SYNTHETIC-005",
+            "time": "2026-01-12T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1020.0,
+            "floor": -76.0
+          },
+          {
+            "day": "2026-01-12",
+            "event": "EOD",
+            "day_net": 308.0,
+            "net": 1020.0,
+            "floor": 20.0
+          },
+          {
+            "day": "2026-01-13",
+            "id": "SYNTHETIC-006",
+            "time": "2026-01-13T10:05:00-05:00",
+            "event": "EXIT",
+            "contracts": 4,
+            "net": 1328.0,
+            "floor": 20.0
+          },
+          {
+            "day": "2026-01-13",
+            "event": "EOD",
+            "day_net": 308.0,
+            "net": 1328.0,
+            "floor": 100
+          }
+        ],
+        "quality": [
+          "SAMPLED_INTRADAY_PATH"
+        ],
+        "approximate": true,
+        "rules_verified": false
+      }
+    }
+  ],
+  "evidence_note": "SYNTHETIC ONLY. Full window traces are reproducible with the recorded CLI command."
+}

@@ -1,0 +1,17 @@
+{
+  "name": "EAA_PROJECT_550_V1_NOT_FIRM_CERTIFIED",
+  "target": 1250,
+  "drawdown": 1000,
+  "trail_lock_profit": 100,
+  "daily_loss": 600,
+  "dll_action": "lock_day",
+  "daily_profit": 550,
+  "profit_action": "liquidate",
+  "consistency": 0.5,
+  "max_contracts": 20,
+  "commission_rt": 1,
+  "additional_slippage_ticks_side": 0,
+  "timezone": "America/New_York",
+  "cutoff": "16:45",
+  "reopen": "18:00"
+}
