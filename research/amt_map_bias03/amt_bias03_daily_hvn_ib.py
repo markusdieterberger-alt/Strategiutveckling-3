@@ -73,16 +73,16 @@ def hvn_band(prof, current_price):
     return {"center":prof["lo"]+(pk+.5)*BIN,"lower":prof["lo"]+left*BIN,
             "upper":prof["lo"]+(right+1)*BIN}
 
-def rejection(bars30, edge: float, direction:int, last_close:float):
+def rejection(bars30, edge: float, opposite_edge: float, direction:int, last_close:float):
     """Probe and reclaim are known by anchor. Require >=3 of last 5 closes on recovered side."""
     if len(bars30) < 25: return False
     tail = bars30.iloc[-5:]
     if direction == 1:
         return (float(bars30.low.min()) <= edge-TICK
-                and last_close >= edge+TICK
+                and edge+TICK <= last_close <= opposite_edge+BIN/2
                 and int((tail.close >= edge+TICK).sum()) >= 3)
     return (float(bars30.high.max()) >= edge+TICK
-            and last_close <= edge-TICK
+            and opposite_edge-BIN/2 <= last_close <= edge-TICK
             and int((tail.close <= edge-TICK).sum()) >= 3)
 
 
@@ -93,18 +93,21 @@ def map_first_touch(df, idx:int, direction:int, global_map):
     if (df.ts.iloc[idx+1]-df.ts.iloc[idx]).total_seconds()>61:
         return ("NEXT_OPEN_GAP",np.nan,np.nan)
     entry=float(df.open.iloc[idx+1])
+    signal_close=float(df.close.iloc[idx])
     centers=global_map["peaks"]
     candidates=[]
     for pk in centers:
         center=global_map["lo"]+(pk+.5)*BIN
-        if direction*(center-entry)<=0: continue
+        if direction*(center-signal_close)<=0: continue
         band=hvn_band_at_peak(global_map,pk)
         target = band["lower"] if direction>0 else band["upper"]
-        if direction*(target-entry) >= BIN:
-            candidates.append((abs(center-entry),pk,target))
+        if direction*(target-signal_close) >= BIN:
+            candidates.append((abs(center-signal_close),pk,target))
     if not candidates:return ("NO_HVN_B",np.nan,np.nan)
     candidates.sort(key=lambda v:(v[0],v[1]))
     target=float(candidates[0][2])
+    if direction*(target-entry) < BIN:
+        return ("TARGET_GAPPED_BEFORE_ENTRY",target,np.nan)
     mirror=2*entry-target
     last_t=df.ts.iloc[idx]+pd.Timedelta(minutes=120)
     end=int(df.ts.searchsorted(last_t,side="right"))
@@ -246,7 +249,7 @@ def run(args):
             if hvn:candidates.append(("DAILY_HVN_BAND",hvn["lower"],hvn["upper"]))
             for kind,lower,upper in candidates:
                 for side,edge in [(1,lower),(-1,upper)]:
-                    if not rejection(last30,edge,side,price):continue
+                    if not rejection(last30,edge,upper if side==1 else lower,side,price):continue
                     # One event per symbol/session/day/model/kind/side/edge.
                     uniq=(df.nyday.iloc[i],session,m,kind,side,round(edge,2))
                     if uniq in seen:continue
@@ -284,26 +287,32 @@ def summary(events):
         map_mirror_first=("map_result",lambda a:int((a=="MIRROR_FIRST").sum()))).reset_index()
 
 def day_bootstrap(events,reps=1000):
-    # Independent day clustering, contrasts IB alignment within SAME model/session/rejection.
+    # Day-level bootstrap from 2x2 sufficient statistics, rather than
+    # concatenating thousands of Pandas DataFrames on every resample.
     out=[]
     for (model,session,rejection),part in events.groupby(["model","session","rejection"]):
-        groups=[grp for _,grp in part.groupby("nyday")]
-        if len(groups)<15: continue
         aligned=part.loc[part.ib_aligned,"next30_signed"]
         other=part.loc[~part.ib_aligned,"next30_signed"]
         if len(aligned)<15 or len(other)<15:continue
-        observed=float(aligned.mean()-other.mean())
-        vals=[]
-        for _ in range(reps):
-            sample=pd.concat([groups[k] for k in rng.integers(0,len(groups),len(groups))],ignore_index=True)
-            a=sample.loc[sample.ib_aligned,"next30_signed"]
-            b=sample.loc[~sample.ib_aligned,"next30_signed"]
-            if len(a)>0 and len(b)>0:vals.append(float(a.mean()-b.mean()))
-        lo,hi=np.quantile(vals,[.025,.975]) if vals else (np.nan,np.nan)
+        daily=part.groupby(["nyday","ib_aligned"]).next30_signed.agg(["size","sum"]).unstack(fill_value=0)
+        daylist=sorted(part.nyday.unique())
+        if len(daylist)<15:continue
+        daymap=part.assign(a_n=part.ib_aligned.astype(int),
+                          a_sum=part.next30_signed*part.ib_aligned.astype(int),
+                          b_n=(~part.ib_aligned).astype(int),
+                          b_sum=part.next30_signed*(~part.ib_aligned).astype(int)
+                        ).groupby("nyday")[["a_n","a_sum","b_n","b_sum"]].sum()
+        values=daymap.to_numpy(dtype=float)
+        indexes=rng.integers(0,len(values),size=(reps,len(values)))
+        roll=values[indexes].sum(axis=1)
+        valid=(roll[:,0]>0)&(roll[:,2]>0)
+        dif=roll[valid,1]/roll[valid,0]-roll[valid,3]/roll[valid,2]
+        lo,hi=np.quantile(dif,[.025,.975]) if len(dif) else (np.nan,np.nan)
         out.append(dict(model=model,session=session,rejection=rejection,
                         n=int(len(part)),ib_aligned_n=len(aligned),not_aligned_n=len(other),
-                        delta_mean30=observed,ci95_low=float(lo),ci95_high=float(hi),
-                        independent_days=len(groups)))
+                        delta_mean30=float(aligned.mean()-other.mean()),
+                        ci95_low=float(lo),ci95_high=float(hi),
+                        independent_days=len(values)))
     return pd.DataFrame(out)
 
 def main():
