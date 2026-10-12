@@ -85,16 +85,57 @@ def rejection(bars30, edge: float, direction:int, last_close:float):
             and last_close <= edge-TICK
             and int((tail.close <= edge-TICK).sum()) >= 3)
 
+
+def map_first_touch(df, idx:int, direction:int, global_map):
+    """Before outcome, select the NEAREST established directional HVN from frozen 1000 bars."""
+    if global_map is None: return ("NO_MAP",np.nan,np.nan)
+    if idx+1>=len(df): return ("NO_FUTURE",np.nan,np.nan)
+    if (df.ts.iloc[idx+1]-df.ts.iloc[idx]).total_seconds()>61:
+        return ("NEXT_OPEN_GAP",np.nan,np.nan)
+    entry=float(df.open.iloc[idx+1])
+    centers=global_map["peaks"]
+    candidates=[]
+    for pk in centers:
+        center=global_map["lo"]+(pk+.5)*BIN
+        if direction*(center-entry)<=0: continue
+        band=hvn_band_at_peak(global_map,pk)
+        target = band["lower"] if direction>0 else band["upper"]
+        if direction*(target-entry) >= BIN:
+            candidates.append((abs(center-entry),pk,target))
+    if not candidates:return ("NO_HVN_B",np.nan,np.nan)
+    candidates.sort(key=lambda v:(v[0],v[1]))
+    target=float(candidates[0][2])
+    mirror=2*entry-target
+    last_t=df.ts.iloc[idx]+pd.Timedelta(minutes=120)
+    end=int(df.ts.searchsorted(last_t,side="right"))
+    seq=df.iloc[idx+1:end]
+    if seq.empty:return ("NO_FUTURE",target,float(mirror))
+    if seq.symbol.nunique()!=1 or seq.ts.diff().dt.total_seconds().dropna().max()>121:
+        return ("OUTCOME_GAP",target,float(mirror))
+    for bar in seq.itertuples(index=False):
+        target_hit=(bar.high>=target if direction==1 else bar.low<=target)
+        mirror_hit=(bar.low<=mirror if direction==1 else bar.high>=mirror)
+        if target_hit and mirror_hit:return ("AMBIGUOUS",target,float(mirror))
+        if target_hit:return ("TARGET_FIRST",target,float(mirror))
+        if mirror_hit:return ("MIRROR_FIRST",target,float(mirror))
+    return ("NEITHER",target,float(mirror))
+
+def hvn_band_at_peak(prof, pk):
+    x=prof["smooth"];left=right=pk;th=.60*x[pk]
+    while left>0 and x[left-1]>=th:left-=1
+    while right+1<len(x) and x[right+1]>=th:right+=1
+    return {"lower":prof["lo"]+left*BIN,"upper":prof["lo"]+(right+1)*BIN}
+
 def classify_value(prof, current_price):
     if prof is None: return "NO_LOCAL_PROFILE"
     return ("BELOW" if current_price < prof["val"] else
             "ABOVE" if current_price > prof["vah"] else "WITHIN")
 
-def get_prev_series(frame, positions, length, asof_index, min_fraction=.95):
+def get_prev_series(frame, length, asof_index, min_fraction=.95, max_gap_seconds=120):
     segment = frame.iloc[asof_index-length+1:asof_index+1]
     if len(segment)!=length: return None
     delta = segment.ts.diff().dt.total_seconds().dropna()
-    if float((delta<=61).mean()) < min_fraction or float(delta.max()) > 120: return None
+    if float((delta<=61).mean()) < min_fraction or float(delta.max()) > max_gap_seconds: return None
     if segment.symbol.nunique()!=1: return None
     return segment
 
@@ -185,14 +226,18 @@ def run(args):
             qa["missing_prior_day"]+=1;continue
         # Reject IB older than 24 hours except first weekday post-weekend.
         if (now-ibs[j]["ready"]).total_seconds()>3*86400: qa["missing_ib"]+=1;continue
-        last30=get_prev_series(df,rows,30,i,1.0)
+        last30=get_prev_series(df,30,i,1.0)
         if last30 is None: continue
-        last150=get_prev_series(df,rows,150,i,0.99)
+        last150=get_prev_series(df,150,i,0.99)
         if last150 is None: qa["missing_local150"]+=1;continue
         price=float(df.close.iloc[i]); ib=ibs[j]
         ib_side=1 if price>ib["hi"] else -1 if price<ib["lo"] else 0
         # Local context *classification*, not an inclusion filter.
         local={m:classify_value(profile(last150,m),price) for m in MODELS}
+        map150_context = {}
+        map1000_source=get_prev_series(df,1000,i,min_fraction=.998,max_gap_seconds=5400)
+        # One <=90m maintenance gap permitted in global 1000bar map; not weekends or rolls.
+        map1000={m:profile(map1000_source,m) if map1000_source is not None else None for m in MODELS}
         for m in MODELS:
             d=day[m]
             if d is None: continue
@@ -209,6 +254,7 @@ def run(args):
                     r30,valid30=outcomes(df,i,side,30)
                     r60,valid60=outcomes(df,i,side,60)
                     if not valid30:continue
+                    map_result,map_target,map_mirror=map_first_touch(df,i,side,map1000[m])
                     # 120-minute momentum is a diagnostic, NOT the entry selection.
                     m120=float(side*(df.close.iloc[i]-df.close.iloc[i-120]))
                     row={"ts":str(now),"nyday":df.nyday.iloc[i],"session":session,"year":int(df.ny.iloc[i].year),
@@ -217,7 +263,9 @@ def run(args):
                          "ib_opposite":bool(ib_side==-side),"ib_inside":bool(ib_side==0),
                          "local_value_state":local[m],"momentum_120_signed":m120,
                          "next30_signed":r30,"next60_signed":r60 if valid60 else np.nan,
-                         "prior_day_rth_range":day["range"],"source_contract":df.symbol.iloc[i]}
+                         "prior_day_rth_range":day["range"],"source_contract":df.symbol.iloc[i],
+                         "map_result":map_result,"map_target":map_target,"map_mirror":map_mirror,
+                         "map_distance":abs(map_target-price) if np.isfinite(map_target) else np.nan}
                     rows.append(row)
                     qa["reject_events"]+=1
     return pd.DataFrame(rows),qa
@@ -230,7 +278,10 @@ def summary(events):
     return x.groupby(g,dropna=False,observed=True).agg(n=("next30_signed","size"),
         mean30=("next30_signed","mean"),mean60=("next60_signed","mean"),
         mean_momentum=("momentum_120_signed","mean"),
-        winning30_pct=("next30_signed",lambda a:100*(a>0).mean())).reset_index()
+        winning30_pct=("next30_signed",lambda a:100*(a>0).mean()),
+        eligible_map=("map_result",lambda a:int(a.isin(["TARGET_FIRST","MIRROR_FIRST","AMBIGUOUS","NEITHER"]).sum())),
+        map_target_first=("map_result",lambda a:int((a=="TARGET_FIRST").sum())),
+        map_mirror_first=("map_result",lambda a:int((a=="MIRROR_FIRST").sum()))).reset_index()
 
 def day_bootstrap(events,reps=1000):
     # Independent day clustering, contrasts IB alignment within SAME model/session/rejection.
