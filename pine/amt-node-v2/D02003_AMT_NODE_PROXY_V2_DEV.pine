@@ -1,0 +1,257 @@
+//@version=6
+// D02003. AMT Node Proxy V2 DEV. NOT compilation/parity/performance certified.
+// Rules: docs/amt-node-v2/D02002_RULES_V2_DEV.md. OHLCV proxy, NOT true VAP.
+strategy("D02003 AMT Node Proxy V2 DEV", overlay=true, pyramiding=0,
+     initial_capital=100000, default_qty_type=strategy.fixed, default_qty_value=1,
+     commission_type=strategy.commission.cash_per_contract, commission_value=0.5,
+     slippage=1, process_orders_on_close=false, calc_on_every_tick=false,
+     calc_on_order_fills=false, use_bar_magnifier=false, max_bars_back=200)
+
+string construction = input.string("HL", "Profile construction", options=["HL", "CLOSE", "TPO"])
+string family = input.string("A", "Family", options=["A", "B"])
+string cohort = input.string("NY", "Cohort", options=["NY", "EU"])
+int fromTime = input.time(timestamp("01 Jan 2019 00:00 +0000"), "Signals from")
+int toTime = input.time(timestamp("31 Dec 2099 00:00 +0000"), "Signals before")
+strategy.risk.max_position_size(1)
+if barstate.isfirst and (not timeframe.isminutes or timeframe.multiplier != 1 or syminfo.mintick != 0.25 or syminfo.pointvalue != 2)
+    runtime.error("Use standard MNQ 1-minute OHLC candles: tick 0.25, point value $2. No synthetic chart.")
+
+// Difference-array profile: O(150 + bins), bounded arrays, no lower-TF requests.
+// Oldest-to-newest accumulation agrees with Python. Ignore numerical dust only.
+f_profile(string mode) =>
+    float lo = low
+    float hi = high
+    for j = 0 to 149
+        lo := math.min(lo, low[j])
+        hi := math.max(hi, high[j])
+    int widthTicks = math.max(4, int(math.floor((hi - lo) * 4.0 / 64.0 + 0.5)))
+    float width = widthTicks * 0.25
+    float anchor = math.floor(lo / width) * width
+    int n = int(math.floor((hi - anchor) / width)) + 1
+    array<float> delta = array.new_float(n + 1, 0.0)
+    float total = 0.0
+    for j = 0 to 149
+        int k = 149 - j
+        int a = int(math.floor(((mode == "CLOSE" ? close[k] : low[k]) - anchor) / width))
+        int b = int(math.floor(((mode == "CLOSE" ? close[k] : high[k]) - anchor) / width))
+        float weight = mode == "TPO" ? 1.0 : volume[k] / (b - a + 1)
+        array.set(delta, a, array.get(delta, a) + weight)
+        array.set(delta, b + 1, array.get(delta, b + 1) - weight)
+        total += weight * (b - a + 1)
+    array<float> raw = array.new_float(n, 0.0)
+    float cumulative = 0.0
+    for j = 0 to n - 1
+        cumulative += array.get(delta, j)
+        array.set(raw, j, cumulative > total * 1e-12 ? cumulative : 0.0)
+    array<float> smooth = array.new_float(n, 0.0)
+    array<float> active = array.new_float()
+    for j = 0 to n - 1
+        float v = ((j > 0 ? array.get(raw, j - 1) : 0.0) + 2.0 * array.get(raw, j) + (j < n - 1 ? array.get(raw, j + 1) : 0.0)) / 4.0
+        v := math.floor(v * 1000000.0 + 0.5) / 1000000.0
+        array.set(smooth, j, v)
+        if v > 0
+            array.push(active, v)
+    float median = array.size(active) > 0 ? array.median(active) : na
+    int pocIndex = array.indexof(smooth, array.max(smooth))
+    array<int> peaks = array.new_int()
+    if n >= 3
+        for j = 1 to n - 2
+            float v = array.get(smooth, j)
+            if v > array.get(smooth, j - 1) and v > array.get(smooth, j + 1) and v >= 1.25 * median
+                array.push(peaks, j)
+    float origin = na
+    float valley = na
+    float destination = na
+    float best = na
+    int direction = 0
+    int pairs = 0
+    if array.size(peaks) >= 2
+        for j = 0 to array.size(peaks) - 2
+            int a = array.get(peaks, j)
+            int b = array.get(peaks, j + 1)
+            if b - a >= 5
+                int v = a + 1
+                for k = a + 2 to b - 1
+                    if array.get(smooth, k) < array.get(smooth, v)
+                        v := k
+                if array.get(smooth, v) <= 0.60 * math.min(array.get(smooth, a), array.get(smooth, b))
+                    pairs += 1
+                    float lower = anchor + (a + 0.5) * width
+                    float upper = anchor + (b + 0.5) * width
+                    float middle = anchor + (v + 0.5) * width
+                    float distance = math.abs(close - middle)
+                    if math.abs(close - lower) <= width * 0.5 and (na(best) or distance < best)
+                        origin := lower
+                        destination := upper
+                        valley := middle
+                        direction := 1
+                        best := distance
+                    if math.abs(close - upper) <= width * 0.5 and (na(best) or distance < best)
+                        origin := upper
+                        destination := lower
+                        valley := middle
+                        direction := -1
+                        best := distance
+    [origin, valley, destination, anchor + (pocIndex + 0.5) * width, width, direction, pairs]
+
+var int continuous = 0
+var int nextFreeze = 0
+var int frozenAt = na
+var int probeAt = na
+var int acceptedCloses = 0
+var int direction = 0
+var bool armed = false
+var float origin = na
+var float valley = na
+var float destination = na
+var float poc = na
+var float binWidth = na
+var float probeHigh = na
+var float probeLow = na
+var float orderStop = na
+var float orderTarget = na
+var int intendedEntryTime = na
+var int lastClosed = 0
+
+bool gap = not na(time[1]) and time - time[1] != 60000
+continuous := gap ? 1 : continuous + 1
+if gap
+    armed := false
+    nextFreeze := 0
+    probeAt := na
+    acceptedCloses := 0
+    // Unknown gaps cannot be predicted. Actual/native fills must be inspected.
+    if strategy.position_size != 0
+        strategy.close("ENTRY", comment="GAP_DATA_REVIEW", immediately=true)
+
+float high5 = ta.highest(high, 5)
+float low5 = ta.lowest(low, 5)
+bool close5 = time_close % 300000 == 0
+int eventFamily = 0
+int eventSide = 0
+float eventTarget = na
+float eventStop = na
+int eventFrozenAt = na
+int blockCode = 0
+
+if barstate.isconfirmed and close5 and continuous >= 150
+    if armed and time_close >= nextFreeze
+        armed := false
+    if armed
+        bool beyond = direction * (close - valley) > binWidth * 0.5
+        bool returned = direction * (close - valley) < -binWidth * 0.5
+        if na(probeAt)
+            if beyond
+                probeAt := time_close
+                acceptedCloses := 1
+                probeHigh := high5
+                probeLow := low5
+        else
+            probeHigh := math.max(probeHigh, high5)
+            probeLow := math.min(probeLow, low5)
+            acceptedCloses := beyond ? acceptedCloses + 1 : 0
+            if acceptedCloses >= 3
+                eventFamily := 1
+                eventSide := direction
+                eventTarget := destination - direction * binWidth * 0.5
+                eventStop := valley - direction * (binWidth * 0.5 + 0.25)
+            else if returned and time_close - probeAt <= 900000
+                eventFamily := 2
+                eventSide := -direction
+                eventTarget := poc
+                eventStop := eventSide == 1 ? probeLow - 0.25 : probeHigh + 0.25
+            if eventFamily > 0 or time_close - probeAt >= 900000
+                armed := false
+        if eventFamily > 0
+            eventFrozenAt := frozenAt
+    // Never rebuild on the same close that consumed an episode.
+    if not armed and eventFamily == 0 and time_close >= nextFreeze
+        [o, v, d, p, w, side, pairCount] = f_profile(construction)
+        if side != 0
+            origin := o
+            valley := v
+            destination := d
+            poc := p
+            binWidth := w
+            direction := side
+            frozenAt := time_close
+            nextFreeze := time_close + 9000000
+            probeAt := na
+            acceptedCloses := 0
+            armed := true
+
+string zone = cohort == "NY" ? "America/New_York" : "Europe/Stockholm"
+int localMinute = hour(time_close, zone) * 60 + minute(time_close, zone)
+bool inSession = cohort == "NY" ? localMinute >= 570 and localMinute < 720 : localMinute >= 420 and localMinute < 720
+bool selectedFamily = eventFamily == (family == "A" ? 1 : 2)
+bool inDates = time_close >= fromTime and time_close < toTime
+float plannedRisk = na
+float signalStop = na
+float signalTarget = na
+bool placed = false
+if eventFamily > 0
+    signalStop := eventSide == 1 ? math.floor(eventStop * 4) / 4 : math.ceil(eventStop * 4) / 4
+    signalTarget := eventSide == 1 ? math.floor(eventTarget * 4) / 4 : math.ceil(eventTarget * 4) / 4
+    plannedRisk := eventSide * (close + eventSide * 0.25 - signalStop)
+    bool valid = eventSide * (close - signalStop) > 0 and eventSide * (signalTarget - close) > 0
+    blockCode := not selectedFamily ? 1 : not inSession ? 2 : not inDates ? 3 : not valid ? 4 : strategy.position_size != 0 ? 5 : 0
+    if blockCode == 0
+        orderStop := signalStop
+        orderTarget := signalTarget
+        intendedEntryTime := time_close
+        strategy.entry("ENTRY", eventSide == 1 ? strategy.long : strategy.short, qty=1, comment=family)
+        strategy.exit("BRACKET", "ENTRY", stop=orderStop, limit=orderTarget)
+        placed := true
+
+if strategy.position_size != 0
+    strategy.exit("BRACKET", "ENTRY", stop=orderStop, limit=orderTarget)
+    if localMinute >= 720 or time_close - intendedEntryTime >= 7200000
+        strategy.close("ENTRY", comment=localMinute >= 720 ? "COHORT_CUTOFF" : "TIME_120M")
+
+// closedtrades is essential: position_size misses same-bar round trips.
+float closedProfit = na
+float closedEntry = na
+float closedExit = na
+float closedEntryTime = na
+float closedExitTime = na
+float closedCommission = na
+bool closedNow = strategy.closedtrades > lastClosed
+if closedNow
+    int k = strategy.closedtrades - 1
+    closedProfit := strategy.closedtrades.profit(k)
+    closedEntry := strategy.closedtrades.entry_price(k)
+    closedExit := strategy.closedtrades.exit_price(k)
+    closedEntryTime := strategy.closedtrades.entry_time(k)
+    closedExitTime := strategy.closedtrades.exit_time(k)
+    closedCommission := strategy.closedtrades.commission(k)
+    lastClosed := strategy.closedtrades
+bool exposedThisBar = strategy.position_size != 0 or closedNow
+bool doubleTouch = exposedThisBar and not na(orderStop) and high >= math.max(orderStop, orderTarget) and low <= math.min(orderStop, orderTarget)
+
+plot(armed ? valley : na, "Frozen LVN", color=color.orange, style=plot.style_linebr)
+plot(armed ? origin : na, "Frozen origin HVN", color=color.gray, style=plot.style_linebr)
+plot(armed ? destination : na, "Frozen destination HVN", color=color.blue, style=plot.style_linebr)
+plot(armed ? poc : na, "Frozen POC", color=color.purple, style=plot.style_linebr)
+plot(eventFamily, "QA family 1A 2B", display=display.data_window)
+plot(eventSide, "QA direction", display=display.data_window)
+plot(eventFrozenAt, "QA profile frozen ms", display=display.data_window)
+plot(eventFamily > 0 ? binWidth : na, "QA bin width", display=display.data_window)
+plot(signalStop, "QA signal stop", display=display.data_window)
+plot(signalTarget, "QA signal target", display=display.data_window)
+plot(plannedRisk, "QA planned risk points", display=display.data_window)
+plot(eventFamily > 0 ? blockCode : na, "QA block 1family 2session 3date 4geometry 5position", display=display.data_window)
+plot(placed ? 1 : 0, "QA order submitted", display=display.data_window)
+plot(doubleTouch ? 1 : 0, "QA ambiguous SL TP minute", display=display.data_window)
+plot(gap ? 1 : 0, "QA data gap", display=display.data_window)
+plot(strategy.closedtrades, "QA closed trades", display=display.data_window)
+plot(closedProfit, "QA native last profit USD", display=display.data_window)
+plot(closedEntry, "QA native last entry", display=display.data_window)
+plot(closedExit, "QA native last exit", display=display.data_window)
+plot(closedEntryTime, "QA native last entry ms", display=display.data_window)
+plot(closedExitTime, "QA native last exit ms", display=display.data_window)
+plot(closedCommission, "QA native last commission USD", display=display.data_window)
+
+var table status = table.new(position.top_right, 1, 2)
+if barstate.islast
+    table.cell(status, 0, 0, "DEV / OHLCV NODE PROXY / NO VAP", text_color=color.orange)
+    table.cell(status, 0, 1, "Native fills require conservative QA; NOT parity-certified")

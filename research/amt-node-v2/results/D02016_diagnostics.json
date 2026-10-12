@@ -1,0 +1,1187 @@
+{
+  "status": "PYTHON_QA_PASS_NOT_PINE_COMPILATION",
+  "prefix_events_tested": 37,
+  "prefix_cutoff_index": 50000,
+  "independent_profile_windows_tested": 100,
+  "max_raw_profile_error": 1.0913936421275139e-11,
+  "common_profile_window_population": "HL frozen profiles that eventually emitted any event, including OFF-session",
+  "common_profile_windows": 4213,
+  "node_agreement": [
+    {
+      "construction": "CLOSE",
+      "n": 4213,
+      "median_poc_delta_bins": 1.0,
+      "corridor_available": 0.433183005,
+      "same_side": 0.3315926893,
+      "lvn_within_one_bin": 0.2214573938
+    },
+    {
+      "construction": "TPO",
+      "n": 4213,
+      "median_poc_delta_bins": 0.0,
+      "corridor_available": 0.5623071446,
+      "same_side": 0.5452171849,
+      "lvn_within_one_bin": 0.496558272
+    }
+  ],
+  "signal_funnel": [
+    {
+      "family": "A",
+      "cohort": "EU",
+      "signals": 673,
+      "valid_geometry": 327,
+      "valid_phenomenon": 347
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "signals": 376,
+      "valid_geometry": 120,
+      "valid_phenomenon": 128
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "signals": 440,
+      "valid_geometry": 137,
+      "valid_phenomenon": 137
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "signals": 272,
+      "valid_geometry": 90,
+      "valid_phenomenon": 90
+    }
+  ],
+  "outcome_reasons": [
+    {
+      "family": "A",
+      "cohort": "EU",
+      "outcome_reason": "ok",
+      "n": 347
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "outcome_reason": "target_not_ahead_at_open",
+      "n": 326
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "outcome_reason": "ok",
+      "n": 128
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "outcome_reason": "target_not_ahead_at_open",
+      "n": 248
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "outcome_reason": "ok",
+      "n": 137
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "outcome_reason": "target_not_ahead_at_open",
+      "n": 303
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "outcome_reason": "ok",
+      "n": 90
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "outcome_reason": "target_not_ahead_at_open",
+      "n": 182
+    }
+  ],
+  "quantiles": [
+    {
+      "family": "A",
+      "cohort": "EU",
+      "quantile": 0.1,
+      "distance": 1.25,
+      "distance_atr": 0.1465629286,
+      "duration_60": 1.0,
+      "mfe_60": 2.75,
+      "mae_60": 2.5,
+      "return_5": -7.5,
+      "return_15": -13.05,
+      "return_30": -19.7,
+      "profile_age": 20.0
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "quantile": 0.25,
+      "distance": 2.6875,
+      "distance_atr": 0.3154999981,
+      "duration_60": 1.0,
+      "mfe_60": 6.5,
+      "mae_60": 7.0,
+      "return_5": -3.5,
+      "return_15": -5.25,
+      "return_30": -9.75,
+      "profile_age": 25.0
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "quantile": 0.5,
+      "distance": 5.0,
+      "distance_atr": 0.5754033688,
+      "duration_60": 4.0,
+      "mfe_60": 15.25,
+      "mae_60": 13.0,
+      "return_5": -0.25,
+      "return_15": -0.25,
+      "return_30": 0.75,
+      "profile_age": 35.0
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "quantile": 0.75,
+      "distance": 10.8125,
+      "distance_atr": 1.026784449,
+      "duration_60": 11.0,
+      "mfe_60": 27.625,
+      "mae_60": 26.5,
+      "return_5": 3.75,
+      "return_15": 6.375,
+      "return_30": 9.25,
+      "profile_age": 67.5
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "quantile": 0.9,
+      "distance": 18.6,
+      "distance_atr": 1.5415861878,
+      "duration_60": 28.4,
+      "mfe_60": 47.35,
+      "mae_60": 48.95,
+      "return_5": 8.75,
+      "return_15": 13.35,
+      "return_30": 21.35,
+      "profile_age": 105.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "quantile": 0.1,
+      "distance": 2.25,
+      "distance_atr": 0.0951171108,
+      "duration_60": 1.0,
+      "mfe_60": 6.35,
+      "mae_60": 7.5,
+      "return_5": -13.575,
+      "return_15": -35.4,
+      "return_30": -45.6,
+      "profile_age": 15.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "quantile": 0.25,
+      "distance": 4.21875,
+      "distance_atr": 0.2736249082,
+      "duration_60": 1.0,
+      "mfe_60": 14.875,
+      "mae_60": 15.75,
+      "return_5": -6.3125,
+      "return_15": -9.5625,
+      "return_30": -21.3125,
+      "profile_age": 20.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "quantile": 0.5,
+      "distance": 12.25,
+      "distance_atr": 0.513276793,
+      "duration_60": 2.0,
+      "mfe_60": 39.0,
+      "mae_60": 29.0,
+      "return_5": -0.625,
+      "return_15": 2.75,
+      "return_30": -1.75,
+      "profile_age": 30.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "quantile": 0.75,
+      "distance": 25.6875,
+      "distance_atr": 0.9005808983,
+      "duration_60": 9.0,
+      "mfe_60": 79.4375,
+      "mae_60": 58.125,
+      "return_5": 8.9375,
+      "return_15": 19.6875,
+      "return_30": 25.25,
+      "profile_age": 55.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "quantile": 0.9,
+      "distance": 41.5875,
+      "distance_atr": 1.3903774651,
+      "duration_60": 31.9,
+      "mfe_60": 125.4,
+      "mae_60": 96.375,
+      "return_5": 27.125,
+      "return_15": 52.275,
+      "return_30": 59.0,
+      "profile_age": 91.5
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "quantile": 0.1,
+      "distance": 2.0,
+      "distance_atr": 0.2145892952,
+      "duration_60": 1.0,
+      "mfe_60": 2.15,
+      "mae_60": 2.4,
+      "return_5": -8.8,
+      "return_15": -15.6,
+      "return_30": -22.3,
+      "profile_age": 15.0
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "quantile": 0.25,
+      "distance": 3.75,
+      "distance_atr": 0.4080884261,
+      "duration_60": 1.0,
+      "mfe_60": 7.75,
+      "mae_60": 7.75,
+      "return_5": -4.25,
+      "return_15": -7.25,
+      "return_30": -13.0,
+      "profile_age": 20.0
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "quantile": 0.5,
+      "distance": 6.75,
+      "distance_atr": 0.7038147799,
+      "duration_60": 4.0,
+      "mfe_60": 18.25,
+      "mae_60": 17.0,
+      "return_5": -1.25,
+      "return_15": 0.75,
+      "return_30": 0.5,
+      "profile_age": 40.0
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "quantile": 0.75,
+      "distance": 13.0,
+      "distance_atr": 1.405549475,
+      "duration_60": 13.0,
+      "mfe_60": 33.5,
+      "mae_60": 30.5,
+      "return_5": 3.0,
+      "return_15": 6.25,
+      "return_30": 12.75,
+      "profile_age": 70.0
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "quantile": 0.9,
+      "distance": 22.875,
+      "distance_atr": 2.1022414448,
+      "duration_60": 42.4,
+      "mfe_60": 54.45,
+      "mae_60": 40.3,
+      "return_5": 9.0,
+      "return_15": 15.35,
+      "return_30": 23.7,
+      "profile_age": 95.0
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "quantile": 0.1,
+      "distance": 2.1,
+      "distance_atr": 0.122807636,
+      "duration_60": 1.0,
+      "mfe_60": 3.5,
+      "mae_60": 6.925,
+      "return_5": -25.575,
+      "return_15": -32.075,
+      "return_30": -68.25,
+      "profile_age": 15.0
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "quantile": 0.25,
+      "distance": 5.09375,
+      "distance_atr": 0.3219947487,
+      "duration_60": 1.0,
+      "mfe_60": 13.4375,
+      "mae_60": 14.25,
+      "return_5": -9.6875,
+      "return_15": -13.3125,
+      "return_30": -24.4375,
+      "profile_age": 20.0
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "quantile": 0.5,
+      "distance": 13.125,
+      "distance_atr": 0.667693797,
+      "duration_60": 2.0,
+      "mfe_60": 35.375,
+      "mae_60": 32.25,
+      "return_5": 2.5,
+      "return_15": 3.5,
+      "return_30": 1.375,
+      "profile_age": 30.0
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "quantile": 0.75,
+      "distance": 27.75,
+      "distance_atr": 1.1679310915,
+      "duration_60": 9.75,
+      "mfe_60": 59.0,
+      "mae_60": 78.0625,
+      "return_5": 11.125,
+      "return_15": 16.25,
+      "return_30": 29.5,
+      "profile_age": 68.75
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "quantile": 0.9,
+      "distance": 42.775,
+      "distance_atr": 1.6269217791,
+      "duration_60": 31.1,
+      "mfe_60": 97.35,
+      "mae_60": 124.2,
+      "return_5": 18.4,
+      "return_15": 34.525,
+      "return_30": 51.825,
+      "profile_age": 100.5
+    }
+  ],
+  "ib_descriptive_only": [
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": -1,
+      "n": 162,
+      "asymmetry60": -0.15432098765432098
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": 0,
+      "n": 105,
+      "asymmetry60": 0.0761904761904762
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": 1,
+      "n": 72,
+      "asymmetry60": -0.027777777777777776
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": null,
+      "n": 8,
+      "asymmetry60": -0.5
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": -1,
+      "n": 66,
+      "asymmetry60": -0.15151515151515152
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": 0,
+      "n": 19,
+      "asymmetry60": -0.15789473684210525
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": 1,
+      "n": 36,
+      "asymmetry60": 0.08333333333333333
+    },
+    {
+      "ib": "NY",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": null,
+      "n": 7,
+      "asymmetry60": -0.42857142857142855
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": -1,
+      "n": 37,
+      "asymmetry60": -0.1891891891891892
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": 0,
+      "n": 37,
+      "asymmetry60": -0.05405405405405406
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": 1,
+      "n": 61,
+      "asymmetry60": -0.16393442622950818
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": null,
+      "n": 2,
+      "asymmetry60": 0.0
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": -1,
+      "n": 24,
+      "asymmetry60": -0.375
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": 0,
+      "n": 13,
+      "asymmetry60": 0.23076923076923078
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": 1,
+      "n": 49,
+      "asymmetry60": -0.061224489795918366
+    },
+    {
+      "ib": "NY",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": null,
+      "n": 4,
+      "asymmetry60": 0.0
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": -1,
+      "n": 163,
+      "asymmetry60": -0.147239263803681
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": 0,
+      "n": 102,
+      "asymmetry60": 0.06862745098039216
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": 1,
+      "n": 74,
+      "asymmetry60": -0.02702702702702703
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "EU",
+      "alignment": null,
+      "n": 8,
+      "asymmetry60": -0.5
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": -1,
+      "n": 67,
+      "asymmetry60": -0.16417910447761194
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": 0,
+      "n": 17,
+      "asymmetry60": -0.058823529411764705
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": 1,
+      "n": 37,
+      "asymmetry60": 0.05405405405405406
+    },
+    {
+      "ib": "EU",
+      "family": "A",
+      "cohort": "NY",
+      "alignment": null,
+      "n": 7,
+      "asymmetry60": -0.42857142857142855
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": -1,
+      "n": 38,
+      "asymmetry60": -0.21052631578947367
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": 0,
+      "n": 35,
+      "asymmetry60": 0.0
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": 1,
+      "n": 62,
+      "asymmetry60": -0.1774193548387097
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "EU",
+      "alignment": null,
+      "n": 2,
+      "asymmetry60": 0.0
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": -1,
+      "n": 23,
+      "asymmetry60": -0.43478260869565216
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": 0,
+      "n": 14,
+      "asymmetry60": 0.2857142857142857
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": 1,
+      "n": 49,
+      "asymmetry60": -0.061224489795918366
+    },
+    {
+      "ib": "EU",
+      "family": "B",
+      "cohort": "NY",
+      "alignment": null,
+      "n": 4,
+      "asymmetry60": 0.0
+    }
+  ],
+  "regimes_descriptive_only": [
+    {
+      "family": "A",
+      "cohort": "EU",
+      "volatility_quartile": "Q1",
+      "n": 117,
+      "asymmetry60": -0.1794871795
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "volatility_quartile": "Q2",
+      "n": 112,
+      "asymmetry60": -0.1339285714
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "volatility_quartile": "Q3",
+      "n": 81,
+      "asymmetry60": 0.1234567901
+    },
+    {
+      "family": "A",
+      "cohort": "EU",
+      "volatility_quartile": "Q4",
+      "n": 37,
+      "asymmetry60": 0.0810810811
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "volatility_quartile": "Q1",
+      "n": 9,
+      "asymmetry60": 0.0
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "volatility_quartile": "Q2",
+      "n": 8,
+      "asymmetry60": -0.75
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "volatility_quartile": "Q3",
+      "n": 30,
+      "asymmetry60": -0.1333333333
+    },
+    {
+      "family": "A",
+      "cohort": "NY",
+      "volatility_quartile": "Q4",
+      "n": 81,
+      "asymmetry60": -0.037037037
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "volatility_quartile": "Q1",
+      "n": 44,
+      "asymmetry60": -0.25
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "volatility_quartile": "Q2",
+      "n": 48,
+      "asymmetry60": -0.1458333333
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "volatility_quartile": "Q3",
+      "n": 33,
+      "asymmetry60": 0.0
+    },
+    {
+      "family": "B",
+      "cohort": "EU",
+      "volatility_quartile": "Q4",
+      "n": 12,
+      "asymmetry60": -0.0833333333
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "volatility_quartile": "Q1",
+      "n": 6,
+      "asymmetry60": 0.1666666667
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "volatility_quartile": "Q2",
+      "n": 7,
+      "asymmetry60": -0.1428571429
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "volatility_quartile": "Q3",
+      "n": 31,
+      "asymmetry60": 0.0322580645
+    },
+    {
+      "family": "B",
+      "cohort": "NY",
+      "volatility_quartile": "Q4",
+      "n": 46,
+      "asymmetry60": -0.2173913043
+    }
+  ],
+  "matched_control_descriptive": [
+    {
+      "control": "BALANCE",
+      "family": "A",
+      "cohort": "EU",
+      "n": 216,
+      "unique_control_events": 172,
+      "node_asymmetry": -0.05555555555555555,
+      "control_asymmetry": -0.14351851851851852,
+      "mean_lift": 0.08796296296296297
+    },
+    {
+      "control": "BALANCE",
+      "family": "A",
+      "cohort": "NY",
+      "n": 66,
+      "unique_control_events": 60,
+      "node_asymmetry": -0.18181818181818182,
+      "control_asymmetry": -0.19696969696969696,
+      "mean_lift": 0.015151515151515152
+    },
+    {
+      "control": "BALANCE",
+      "family": "B",
+      "cohort": "EU",
+      "n": 61,
+      "unique_control_events": 58,
+      "node_asymmetry": -0.18032786885245902,
+      "control_asymmetry": 0.0,
+      "mean_lift": -0.18032786885245902
+    },
+    {
+      "control": "BALANCE",
+      "family": "B",
+      "cohort": "NY",
+      "n": 42,
+      "unique_control_events": 38,
+      "node_asymmetry": -0.023809523809523808,
+      "control_asymmetry": -0.5,
+      "mean_lift": 0.47619047619047616
+    },
+    {
+      "control": "PSEUDO",
+      "family": "A",
+      "cohort": "EU",
+      "n": 322,
+      "unique_control_events": 285,
+      "node_asymmetry": -0.062111801242236024,
+      "control_asymmetry": -0.08385093167701864,
+      "mean_lift": 0.021739130434782608
+    },
+    {
+      "control": "PSEUDO",
+      "family": "A",
+      "cohort": "NY",
+      "n": 125,
+      "unique_control_events": 118,
+      "node_asymmetry": -0.112,
+      "control_asymmetry": -0.112,
+      "mean_lift": 0.0
+    },
+    {
+      "control": "PSEUDO",
+      "family": "B",
+      "cohort": "EU",
+      "n": 116,
+      "unique_control_events": 107,
+      "node_asymmetry": -0.23275862068965517,
+      "control_asymmetry": -0.23275862068965517,
+      "mean_lift": 0.0
+    },
+    {
+      "control": "PSEUDO",
+      "family": "B",
+      "cohort": "NY",
+      "n": 83,
+      "unique_control_events": 77,
+      "node_asymmetry": -0.0963855421686747,
+      "control_asymmetry": -0.024096385542168676,
+      "mean_lift": -0.07228915662650602
+    }
+  ],
+  "matched_total": [
+    {
+      "control_model": "BALANCE",
+      "n": 702,
+      "matched": 386
+    },
+    {
+      "control_model": "PSEUDO",
+      "n": 702,
+      "matched": 646
+    }
+  ],
+  "sensitivity": [
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 299,
+      "PF": 0.5744953540531881,
+      "net_points": -332.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 295,
+      "PF": 0.5700874069278083,
+      "net_points": -332.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 298,
+      "PF": 0.5759717314487632,
+      "net_points": -330.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 93,
+      "PF": 1.1274455002794856,
+      "net_points": 57.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 93,
+      "PF": 1.1274455002794856,
+      "net_points": 57.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 93,
+      "PF": 1.1274455002794856,
+      "net_points": 57.0
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 255,
+      "PF": 0.6434869406088837,
+      "net_points": -535.75
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 253,
+      "PF": 0.6406458055925432,
+      "net_points": -539.75
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 255,
+      "PF": 0.6434869406088837,
+      "net_points": -535.75
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 152,
+      "PF": 0.5383388704318937,
+      "net_points": -868.5
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 152,
+      "PF": 0.5383388704318937,
+      "net_points": -868.5
+    },
+    {
+      "construction": "CLOSE",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 152,
+      "PF": 0.5383388704318937,
+      "net_points": -868.5
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 327,
+      "PF": 0.7460786542396,
+      "net_points": -279.25
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 324,
+      "PF": 0.7461009174311927,
+      "net_points": -276.75
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 327,
+      "PF": 0.7460786542396,
+      "net_points": -279.25
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 120,
+      "PF": 1.062984496124031,
+      "net_points": 48.75
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 120,
+      "PF": 1.062984496124031,
+      "net_points": 48.75
+    },
+    {
+      "construction": "HL",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 120,
+      "PF": 1.062984496124031,
+      "net_points": 48.75
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 137,
+      "PF": 0.9101426918627072,
+      "net_points": -58.25
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 137,
+      "PF": 0.9101426918627072,
+      "net_points": -58.25
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 137,
+      "PF": 0.9101426918627072,
+      "net_points": -58.25
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 90,
+      "PF": 1.086804544130498,
+      "net_points": 74.5
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 90,
+      "PF": 1.086804544130498,
+      "net_points": 74.5
+    },
+    {
+      "construction": "HL",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 90,
+      "PF": 1.086804544130498,
+      "net_points": 74.5
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 320,
+      "PF": 0.5602409638554217,
+      "net_points": -602.25
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 317,
+      "PF": 0.5490628445424476,
+      "net_points": -613.5
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 320,
+      "PF": 0.5602409638554217,
+      "net_points": -602.25
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 121,
+      "PF": 0.5594059405940595,
+      "net_points": -511.75
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 121,
+      "PF": 0.5594059405940595,
+      "net_points": -511.75
+    },
+    {
+      "construction": "TPO",
+      "family": "A",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 121,
+      "PF": 0.5594059405940595,
+      "net_points": -511.75
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "ALL",
+      "n": 125,
+      "PF": 0.922360248447205,
+      "net_points": -50.0
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 125,
+      "PF": 0.922360248447205,
+      "net_points": -50.0
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "EU",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 125,
+      "PF": 0.922360248447205,
+      "net_points": -50.0
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "ALL",
+      "n": 56,
+      "PF": 1.20733740967204,
+      "net_points": 93.25
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_DEGRADED",
+      "n": 56,
+      "PF": 1.20733740967204,
+      "net_points": 93.25
+    },
+    {
+      "construction": "TPO",
+      "family": "B",
+      "cohort": "NY",
+      "sample": "EXCLUDE_GAP_TRADES",
+      "n": 56,
+      "PF": 1.20733740967204,
+      "net_points": 93.25
+    }
+  ],
+  "diagnostic_notes": [
+    "No base-effect gate passed; IB incremental selection deliberately not performed.",
+    "Matched controls reused; matched lift is descriptive, no independence or p-value claim.",
+    "Open-trough DD uses sampled adverse excursion versus closed-equity peaks; not tick-accurate funded drawdown.",
+    "Minute OHLC cannot certify actual intrabar order. No actual Pine execution occurred."
+  ]
+}

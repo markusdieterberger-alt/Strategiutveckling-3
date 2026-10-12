@@ -1,0 +1,222 @@
+{
+  "identity": "D02019",
+  "date": "2026-10-12",
+  "status": "REVISE_DEV_NOT_COMPILED_NOT_PARITY_VERIFIED",
+  "github_branch": "research/amt-node-proxy-v2-dev-2026-10-12",
+  "repository": "markusdieterberger-alt/Strategiutveckling-3",
+  "drive_folder": "https://drive.google.com/drive/folders/1W6dB7lc6t6st2oKr4zSEj9wfwdUVaaIG",
+  "files": [
+    {
+      "name": "D02001_RESEARCH_HANDOVER.md",
+      "drive_id": "1Rm_uR0d3FCczq0zgjFBUrhKNgjm0vAMT",
+      "url": "https://drive.google.com/file/d/1Rm_uR0d3FCczq0zgjFBUrhKNgjm0vAMT/view?usp=drivesdk"
+    },
+    {
+      "name": "D02002_RULES_V2_DEV.md",
+      "drive_id": "164IIpZpom4uhBhmUyYVGORG3aLyE-q1k",
+      "url": "https://drive.google.com/file/d/164IIpZpom4uhBhmUyYVGORG3aLyE-q1k/view?usp=drivesdk"
+    },
+    {
+      "name": "D02012_VALIDATION_STATUS.md",
+      "drive_id": "1FEhs7GsWUUBttmjkRrV_5pRHF3MoQAK2",
+      "url": "https://drive.google.com/file/d/1FEhs7GsWUUBttmjkRrV_5pRHF3MoQAK2/view?usp=drivesdk"
+    },
+    {
+      "name": "D02013_DESKTOP_ORDER.md",
+      "drive_id": "1XSqsfkbboN19B58Tj4VQ16pLh6QQVmRj",
+      "url": "https://drive.google.com/file/d/1XSqsfkbboN19B58Tj4VQ16pLh6QQVmRj/view?usp=drivesdk"
+    },
+    {
+      "name": "D02014_QA_REPORT.md",
+      "drive_id": "1csCA-HOpSYpW8BR5zjVQIJ-12StyI1Ro",
+      "url": "https://drive.google.com/file/d/1csCA-HOpSYpW8BR5zjVQIJ-12StyI1Ro/view?usp=drivesdk"
+    },
+    {
+      "name": "D02015_OPTIMIZATION_STATUS.md",
+      "drive_id": "1Mv074inYoWaLDdhk2QB6DtwBmH-NJpmn",
+      "url": "https://drive.google.com/file/d/1Mv074inYoWaLDdhk2QB6DtwBmH-NJpmn/view?usp=drivesdk"
+    },
+    {
+      "name": "D02003_AMT_NODE_PROXY_V2_DEV.pine",
+      "drive_id": "1gVNWojq9qyzJCeoj0gF13LKe1HrVpRVc",
+      "url": "https://drive.google.com/file/d/1gVNWojq9qyzJCeoj0gF13LKe1HrVpRVc/view?usp=drivesdk"
+    },
+    {
+      "name": "D02004_research.py",
+      "drive_id": "1db36gfVCmDfn4B7fbGQFtREpH8ow42Qb",
+      "url": "https://drive.google.com/file/d/1db36gfVCmDfn4B7fbGQFtREpH8ow42Qb/view?usp=drivesdk"
+    },
+    {
+      "name": "D02011_tests.py",
+      "drive_id": "18NFxLJOvKucXFX8-JfuzgnUAGyiumc1e",
+      "url": "https://drive.google.com/file/d/18NFxLJOvKucXFX8-JfuzgnUAGyiumc1e/view?usp=drivesdk"
+    },
+    {
+      "name": "D02017_qa_diagnostics.py",
+      "drive_id": "1XmjlAc_naY7CI9BGfzp3Bi_pN1O900B-",
+      "url": "https://drive.google.com/file/d/1XmjlAc_naY7CI9BGfzp3Bi_pN1O900B-/view?usp=drivesdk"
+    },
+    {
+      "name": "D02005_events.csv",
+      "drive_id": "1zsbZNQtptKDhYk7ekPotufWRfR5QZ_l8",
+      "url": "https://drive.google.com/file/d/1zsbZNQtptKDhYk7ekPotufWRfR5QZ_l8/view?usp=drivesdk"
+    },
+    {
+      "name": "D02006_trades.csv",
+      "drive_id": "1k-qDN_vKUirEnVXHi7pZao2ASKq5BRF1",
+      "url": "https://drive.google.com/file/d/1k-qDN_vKUirEnVXHi7pZao2ASKq5BRF1/view?usp=drivesdk"
+    },
+    {
+      "name": "D02007_phenomenon_summary.csv",
+      "drive_id": "1xatQobOktMHA1J4x-jPejb3bRk5nwZKw",
+      "url": "https://drive.google.com/file/d/1xatQobOktMHA1J4x-jPejb3bRk5nwZKw/view?usp=drivesdk"
+    },
+    {
+      "name": "D02008_baseline_summary.csv",
+      "drive_id": "1g3T2mnzaHpzX3h1Ei5wzkJEyHL3RmOoJ",
+      "url": "https://drive.google.com/file/d/1g3T2mnzaHpzX3h1Ei5wzkJEyHL3RmOoJ/view?usp=drivesdk"
+    },
+    {
+      "name": "D02009_matched_controls.csv",
+      "drive_id": "10eRvMfLoFCLfWn84NMjqAyJPMvCohbXv",
+      "url": "https://drive.google.com/file/d/10eRvMfLoFCLfWn84NMjqAyJPMvCohbXv/view?usp=drivesdk"
+    },
+    {
+      "name": "D02010_run_manifest.json",
+      "drive_id": "1rMdBwg0Gs42g07swl8J8v7xa_aCDQ3Qn",
+      "url": "https://drive.google.com/file/d/1rMdBwg0Gs42g07swl8J8v7xa_aCDQ3Qn/view?usp=drivesdk"
+    },
+    {
+      "name": "D02016_diagnostics.json",
+      "drive_id": "1zIs7rILDjSmoSug2zvpq_2oXKL9b649F",
+      "url": "https://drive.google.com/file/d/1zIs7rILDjSmoSug2zvpq_2oXKL9b649F/view?usp=drivesdk"
+    },
+    {
+      "name": "D02018_execution_log.txt",
+      "drive_id": "1zibPWAUgFjTAp9twrUK9Nt5kvzD80MPs",
+      "url": "https://drive.google.com/file/d/1zibPWAUgFjTAp9twrUK9Nt5kvzD80MPs/view?usp=drivesdk"
+    }
+  ],
+  "hashes": [
+    {
+      "path": "docs/amt-node-v2/D02001_RESEARCH_HANDOVER.md",
+      "name": "D02001_RESEARCH_HANDOVER.md",
+      "bytes": 18885,
+      "sha256": "02078926c44ee414524062a98b83e39fa981ff6d07d8545538599035da4b2341"
+    },
+    {
+      "path": "docs/amt-node-v2/D02002_RULES_V2_DEV.md",
+      "name": "D02002_RULES_V2_DEV.md",
+      "bytes": 10074,
+      "sha256": "42b14bc1c90e65448474831f4f4a40a329119199d8c9e7d3019716d7af3ef5fd"
+    },
+    {
+      "path": "docs/amt-node-v2/D02012_VALIDATION_STATUS.md",
+      "name": "D02012_VALIDATION_STATUS.md",
+      "bytes": 2613,
+      "sha256": "3708fdd4665dea17cbb5b8fc9f9933085dd8c92a8eb7c6658274e6e29737807c"
+    },
+    {
+      "path": "docs/amt-node-v2/D02013_DESKTOP_ORDER.md",
+      "name": "D02013_DESKTOP_ORDER.md",
+      "bytes": 2228,
+      "sha256": "d228f59c72bbc7d1fb4d9edf539ac0dab5c87a763e2e7d9fd4a8f243de779425"
+    },
+    {
+      "path": "docs/amt-node-v2/D02014_QA_REPORT.md",
+      "name": "D02014_QA_REPORT.md",
+      "bytes": 4600,
+      "sha256": "319c37b861ac5d1ca19112675473c64baa8b55a56564ff9e9d6dac26163610f8"
+    },
+    {
+      "path": "docs/amt-node-v2/D02015_OPTIMIZATION_STATUS.md",
+      "name": "D02015_OPTIMIZATION_STATUS.md",
+      "bytes": 2416,
+      "sha256": "4890bf3d9573fd19bf1604b9c68d34aaca3b93b87f20fbfe45ce3de330a78290"
+    },
+    {
+      "path": "pine/amt-node-v2/D02003_AMT_NODE_PROXY_V2_DEV.pine",
+      "name": "D02003_AMT_NODE_PROXY_V2_DEV.pine",
+      "bytes": 12208,
+      "sha256": "a1f92ff4ad55b1e2c0e6388e86f8add80cbbd372e704fabfeca6cb927972abca"
+    },
+    {
+      "path": "research/amt-node-v2/D02004_research.py",
+      "name": "D02004_research.py",
+      "bytes": 27282,
+      "sha256": "f2cf05f8627717ac8c8681b86f5bcbb1b30f8846bd46404d0dfd7103b3dc7051"
+    },
+    {
+      "path": "research/amt-node-v2/D02011_tests.py",
+      "name": "D02011_tests.py",
+      "bytes": 6888,
+      "sha256": "26cb05c6446ffad882e9fad81a5b7e4264770b1057ec7644b85b43329fe4783e"
+    },
+    {
+      "path": "research/amt-node-v2/D02017_qa_diagnostics.py",
+      "name": "D02017_qa_diagnostics.py",
+      "bytes": 8487,
+      "sha256": "b3f7bc0cbcde061c49c8e2c2d035af7ad2657d4fb0e5de5b431af469c23fcf9c"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02005_events.csv",
+      "name": "D02005_events.csv",
+      "bytes": 13188610,
+      "sha256": "451e6decb2ff739b543a0e1bc41a6f7e67ecbbed203d237bf0a1171395d13d25"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02005_events.csv.gz",
+      "name": "D02005_events.csv.gz",
+      "bytes": 2936043,
+      "sha256": "e64a7f61ca770cbfbb05d9b99f77a7dd65850bf788d7322efa32744a621f8cc9"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02006_trades.csv",
+      "name": "D02006_trades.csv",
+      "bytes": 1153600,
+      "sha256": "17329a5072b65283e3a3f13fa94ae0dd6ac742c6baaca73bbc772d3dfdce84a2"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02006_trades.csv.gz",
+      "name": "D02006_trades.csv.gz",
+      "bytes": 270948,
+      "sha256": "f52a18fb7051e8013b4100dd0b4224987cbc6717a21427bb2b8180ed05f38a07"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02007_phenomenon_summary.csv",
+      "name": "D02007_phenomenon_summary.csv",
+      "bytes": 165553,
+      "sha256": "72bcb21d0588e8644513be9630fd12bb714cd0d1e18249d6c2405ff91f6ea3bf"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02008_baseline_summary.csv",
+      "name": "D02008_baseline_summary.csv",
+      "bytes": 50953,
+      "sha256": "28927b52df2d93380285e41ef027686b877fc5de2aeba51320227277331f275e"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02009_matched_controls.csv",
+      "name": "D02009_matched_controls.csv",
+      "bytes": 128376,
+      "sha256": "39c229bbb258bab4406c0829f14305e80ea7ddbe4b6d2cd1c60536d22cb344ff"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02010_run_manifest.json",
+      "name": "D02010_run_manifest.json",
+      "bytes": 3665,
+      "sha256": "981a2dca3c2d39b22d7622f2825d63a6f86cac21f8631395a6cf408163a67619"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02016_diagnostics.json",
+      "name": "D02016_diagnostics.json",
+      "bytes": 25328,
+      "sha256": "db1b32252f02f60c485b8f1b800ae561ab903f365df561215abd479f014f8c6c"
+    },
+    {
+      "path": "research/amt-node-v2/results/D02018_execution_log.txt",
+      "name": "D02018_execution_log.txt",
+      "bytes": 7526,
+      "sha256": "d11d623efdc568664de3aeb9ee949056077a8c2d4cae8e2a42553e57c272ba58"
+    }
+  ]
+}

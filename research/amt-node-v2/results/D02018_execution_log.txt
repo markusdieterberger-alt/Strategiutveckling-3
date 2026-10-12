@@ -1,0 +1,166 @@
+D02018 — Actual local test and run evidence; 2026-10-12
+
+UNIT TESTS
+test_adverse_gap_overrides_market_time_exit (__main__.FillTests.test_adverse_gap_overrides_market_time_exit) ... ok
+test_cutoff_market_exit_next_open (__main__.FillTests.test_cutoff_market_exit_next_open) ... ok
+test_double_touch_stop_first (__main__.FillTests.test_double_touch_stop_first) ... ok
+test_entry_minute_protected (__main__.FillTests.test_entry_minute_protected) ... ok
+test_short_gap_and_tie (__main__.FillTests.test_short_gap_and_tie) ... ok
+test_signal_bar_cannot_fill (__main__.FillTests.test_signal_bar_cannot_fill) ... ok
+test_stop_gap_is_worse_open (__main__.FillTests.test_stop_gap_is_worse_open) ... ok
+test_target_gap_precedes_later_stop (__main__.FillTests.test_target_gap_precedes_later_stop) ... ok
+test_unknown_entry_gap_cannot_be_skipped (__main__.FillTests.test_unknown_entry_gap_cannot_be_skipped) ... ok
+test_bootstrap_is_deterministic_and_day_blocked (__main__.OutcomeTests.test_bootstrap_is_deterministic_and_day_blocked) ... ok
+test_mirror_same_minute_adverse (__main__.OutcomeTests.test_mirror_same_minute_adverse) ... ok
+test_open_resolves_mirror_order (__main__.OutcomeTests.test_open_resolves_mirror_order) ... ok
+test_unhit_is_zero (__main__.OutcomeTests.test_unhit_is_zero) ... ok
+test_close_only_uses_close_bin (__main__.ProfileTests.test_close_only_uses_close_bin) ... ok
+test_flat_has_no_pair (__main__.ProfileTests.test_flat_has_no_pair) ... ok
+test_future_mutation_does_not_change_profile (__main__.ProfileTests.test_future_mutation_does_not_change_profile) ... ok
+test_grid_width_half_up (__main__.ProfileTests.test_grid_width_half_up) ... ok
+test_known_two_peak_corridor (__main__.ProfileTests.test_known_two_peak_corridor) ... ok
+test_mass_is_preserved_HL (__main__.ProfileTests.test_mass_is_preserved_HL) ... ok
+test_tpo_is_time_not_volume (__main__.ProfileTests.test_tpo_is_time_not_volume) ... ok
+test_A_needs_three_confirmed_closes (__main__.StateTests.test_A_needs_three_confirmed_closes) ... ok
+test_B_return_before_acceptance (__main__.StateTests.test_B_return_before_acceptance) ... ok
+test_boundary_equality_is_not_acceptance (__main__.StateTests.test_boundary_equality_is_not_acceptance) ... ok
+test_inside_breaks_consecutive_acceptance (__main__.StateTests.test_inside_breaks_consecutive_acceptance) ... ok
+test_return_on_third_bar_is_allowed (__main__.StateTests.test_return_on_third_bar_is_allowed) ... ok
+test_short_symmetry (__main__.StateTests.test_short_symmetry) ... ok
+
+----------------------------------------------------------------------
+Ran 26 tests in 0.032s
+
+OK
+
+FULL RUN
+DATA VERIFIED {"gzip_sha256": "468be1268212be3dc74149cfd5facb5b7c1c1623d7d304937922a1eff857f1ba", "csv_sha256": "45cb26293d64d77b10062a3603c38b5eb66743d22dea7611a9672478f54e1ccd", "rows": 2614900, "first": "2019-05-05 22:03:00+00:00", "last": "2026-10-02 20:59:00+00:00", "trading_days": 1918, "rolls": 30, "gap_transitions": 5791, "continuous_150m_5m_closes": 450491, "duplicates": 0, "invalid_ohlc": 0, "off_tick_grid": 0, "missing_values": 0, "ib_complete": {"NY": 1823, "EU": 1823}, "all_periods": "EXPOSED_DEV", "python": "3.12.14", "pandas": "2.2.3", "numpy": "2.3.5", "degraded_utc_dates": ["2020-02-27", "2020-02-28", "2020-05-05", "2020-06-30", "2020-07-01", "2021-12-05", "2022-01-02", "2024-09-18", "2025-09-17", "2025-09-24", "2025-11-28", "2026-01-31", "2026-03-15", "2026-03-16", "2026-03-21", "2026-04-10", "2026-05-24", "2026-08-29"]}
+GENERATED NODE HL {'profile_evaluations': 250642, 'frozen_profiles': 7322, 'signals_OFF': 2452, 'signals_NY': 648, 'signals_EU': 1113} seconds 29.3
+GENERATED NODE CLOSE {'profile_evaluations': 119778, 'frozen_profiles': 12165, 'signals_OFF': 5198, 'signals_NY': 1253, 'signals_EU': 2032} seconds 41.2
+GENERATED NODE TPO {'profile_evaluations': 244869, 'frozen_profiles': 7691, 'signals_OFF': 2531, 'signals_NY': 620, 'signals_EU': 1074} seconds 61.5
+GENERATED PSEUDO HL {'profile_evaluations': 250642, 'frozen_profiles': 7322, 'signals_OFF': 2329, 'signals_NY': 644, 'signals_EU': 1061} seconds 82.5
+GENERATED BALANCE HL {'profile_evaluations': 16262, 'frozen_profiles': 16262, 'signals_NY': 1995, 'signals_OFF': 9035, 'signals_EU': 3561} seconds 86.0
+FINISHED 35546 events 2095 trades 93.43 seconds
+
+INDEPENDENT DIAGNOSTICS
+{
+  "status": "PYTHON_QA_PASS_NOT_PINE_COMPILATION",
+  "prefix_events_tested": 37,
+  "independent_profile_windows_tested": 100,
+  "max_raw_profile_error": 1.0913936421275139e-11,
+  "node_agreement": [
+    {
+      "construction": "CLOSE",
+      "n": 4213,
+      "median_poc_delta_bins": 1.0,
+      "corridor_available": 0.433183005,
+      "same_side": 0.3315926893,
+      "lvn_within_one_bin": 0.2214573938
+    },
+    {
+      "construction": "TPO",
+      "n": 4213,
+      "median_poc_delta_bins": 0.0,
+      "corridor_available": 0.5623071446,
+      "same_side": 0.5452171849,
+      "lvn_within_one_bin": 0.496558272
+    }
+  ],
+  "matched_control_descriptive": [
+    {
+      "control": "BALANCE",
+      "family": "A",
+      "cohort": "EU",
+      "n": 216,
+      "unique_control_events": 172,
+      "node_asymmetry": -0.05555555555555555,
+      "control_asymmetry": -0.14351851851851852,
+      "mean_lift": 0.08796296296296297
+    },
+    {
+      "control": "BALANCE",
+      "family": "A",
+      "cohort": "NY",
+      "n": 66,
+      "unique_control_events": 60,
+      "node_asymmetry": -0.18181818181818182,
+      "control_asymmetry": -0.19696969696969696,
+      "mean_lift": 0.015151515151515152
+    },
+    {
+      "control": "BALANCE",
+      "family": "B",
+      "cohort": "EU",
+      "n": 61,
+      "unique_control_events": 58,
+      "node_asymmetry": -0.18032786885245902,
+      "control_asymmetry": 0.0,
+      "mean_lift": -0.18032786885245902
+    },
+    {
+      "control": "BALANCE",
+      "family": "B",
+      "cohort": "NY",
+      "n": 42,
+      "unique_control_events": 38,
+      "node_asymmetry": -0.023809523809523808,
+      "control_asymmetry": -0.5,
+      "mean_lift": 0.47619047619047616
+    },
+    {
+      "control": "PSEUDO",
+      "family": "A",
+      "cohort": "EU",
+      "n": 322,
+      "unique_control_events": 285,
+      "node_asymmetry": -0.062111801242236024,
+      "control_asymmetry": -0.08385093167701864,
+      "mean_lift": 0.021739130434782608
+    },
+    {
+      "control": "PSEUDO",
+      "family": "A",
+      "cohort": "NY",
+      "n": 125,
+      "unique_control_events": 118,
+      "node_asymmetry": -0.112,
+      "control_asymmetry": -0.112,
+      "mean_lift": 0.0
+    },
+    {
+      "control": "PSEUDO",
+      "family": "B",
+      "cohort": "EU",
+      "n": 116,
+      "unique_control_events": 107,
+      "node_asymmetry": -0.23275862068965517,
+      "control_asymmetry": -0.23275862068965517,
+      "mean_lift": 0.0
+    },
+    {
+      "control": "PSEUDO",
+      "family": "B",
+      "cohort": "NY",
+      "n": 83,
+      "unique_control_events": 77,
+      "node_asymmetry": -0.0963855421686747,
+      "control_asymmetry": -0.024096385542168676,
+      "mean_lift": -0.07228915662650602
+    }
+  ],
+  "matched_total": [
+    {
+      "control_model": "BALANCE",
+      "n": 702,
+      "matched": 386
+    },
+    {
+      "control_model": "PSEUDO",
+      "n": 702,
+      "matched": 646
+    }
+  ]
+}
+
+BROWSER EVIDENCE
+Two requested TradingView chart navigation calls failed: timed out awaiting tools/call after 300s. Recovery listed only about:blank and a second direct navigation also timed out. No Pine Editor state, compiler result, Strategy Tester result or export was obtained. Not classified as bot detection.
