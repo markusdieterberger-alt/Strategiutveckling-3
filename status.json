@@ -1,0 +1,185 @@
+{
+  "schema": 1,
+  "updated_at": "2026-10-13T15:30:00+02:00",
+  "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
+  "strategies": [
+    {
+      "id": "ct",
+      "name": "CT Scalper",
+      "status": "TV-TEST",
+      "priority": 1,
+      "stage": "Pine A/B/C",
+      "summary": "EAA original kontra EAB ABSORB RR≥2 och kompletterande FADE-gate. Långsiktig edge ej fastställd.",
+      "metrics": [
+        {
+          "label": "EAA affärer",
+          "value": "1 197",
+          "note": "2024–2026"
+        },
+        {
+          "label": "EAA PF",
+          "value": "0,984",
+          "note": "fullperiod, historiskt"
+        },
+        {
+          "label": "2026 PF",
+          "value": "1,207",
+          "note": "urval, ej OOS"
+        }
+      ],
+      "links": [
+        {
+          "title": "CT forskningsrapport",
+          "url": "https://docs.google.com/document/d/1bFtA1STNWwOYtuL8dx0bgGgNXGG2ZOlsxxjstI5K6Zk/edit"
+        },
+        {
+          "title": "EAB RR-gate kod",
+          "url": "https://github.com/markusdieterberger-alt/Strategiutveckling-3/blob/eaa/rr-gate-dev-20261011/eaa_ct_scalper/EAB_CT_SCALPER_RR_GATE_DEV_V1.pine"
+        }
+      ]
+    },
+    {
+      "id": "hma",
+      "name": "HMA Midday",
+      "status": "VÄNTAR",
+      "priority": 2,
+      "stage": "Pine original ↔ execution-fixed",
+      "summary": "Båda varianterna finns, TradingView A/B och trade-export saknas.",
+      "metrics": [],
+      "links": [
+        {
+          "title": "Original Pine",
+          "url": "https://drive.google.com/file/d/1XZDOfUxcKlEayLmSRXLQJ49IkE6dKCaW/view"
+        },
+        {
+          "title": "Execution-fixed Pine",
+          "url": "https://drive.google.com/file/d/1XCfvbw78Zlm3sSMT-aotjWLf3n-Y0EoZ/view"
+        }
+      ]
+    },
+    {
+      "id": "prime",
+      "name": "AMT Micro Prime",
+      "status": "REVISE",
+      "priority": 3,
+      "stage": "Pine-kompilering och parity",
+      "summary": "Source-Python exakt reproducerad. Korrigerad exekvering positiv i historik; native TradingView saknas.",
+      "metrics": [
+        {
+          "label": "Python-affärer",
+          "value": "150",
+          "note": "2019–2026"
+        },
+        {
+          "label": "PF 1 MNQ",
+          "value": "1,45",
+          "note": "2p friktion"
+        },
+        {
+          "label": "Netto",
+          "value": "+983,25p",
+          "note": "2p friktion, CI omfattar förlust"
+        }
+      ],
+      "links": [
+        {
+          "title": "Pine DEV",
+          "url": "https://drive.google.com/file/d/1sXB40gtit4uRbwcPyyFm8ojwpiojIrMU/view"
+        },
+        {
+          "title": "Execution Report",
+          "url": "https://drive.google.com/file/d/12aqgIvhTVsLcpd-CM8Z0nH6Pu2t4qTze/view"
+        },
+        {
+          "title": "Parity Report",
+          "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
+        }
+      ]
+    },
+    {
+      "id": "xac",
+      "name": "XAC Recovery",
+      "status": "FORENSIK",
+      "priority": null,
+      "stage": "Historisk 60 %-utredning",
+      "summary": "Äldre 60 %-passrate är rapporterad, inte reproducerad eller bekräftad. Ingen ny scalp-optimering.",
+      "metrics": [
+        {
+          "label": "Rapporterat",
+          "value": ">60 %",
+          "note": "15 dagar, obevisad källa"
+        },
+        {
+          "label": "Pine Scalp",
+          "value": "2 273",
+          "note": "referens, parity fail"
+        },
+        {
+          "label": "Python Scalp",
+          "value": "1 937",
+          "note": "referens, parity fail"
+        }
+      ],
+      "links": [
+        {
+          "title": "A003 Handover",
+          "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+        }
+      ]
+    }
+  ],
+  "decisions": [
+    {
+      "title": "CT Scalper – EAA/EAB",
+      "status": "DATOR",
+      "text": "Fullständig Strategy Tester A/B/C, identiska Properties och export av trades.",
+      "url": "https://docs.google.com/document/d/1giLgrbKjndSvvbbmfhHBD75DcC_boiscTYrl5Ip8k4U/edit"
+    },
+    {
+      "title": "HMA Midday – A/B",
+      "status": "DATOR",
+      "text": "Original först, sedan execution-fixed, 15m MNQ.",
+      "url": "https://drive.google.com/file/d/1XZDOfUxcKlEayLmSRXLQJ49IkE6dKCaW/view"
+    },
+    {
+      "title": "Prime – Pine parity",
+      "status": "DATOR",
+      "text": "Kompilera DEV, jämför första signalfält och native fills.",
+      "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
+    },
+    {
+      "title": "XAC 60 %-recovery",
+      "status": "UNDERLAG",
+      "text": "Sök originalgenerator, fundingregler och förklara äldre passrate innan nya investeringar.",
+      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+    }
+  ],
+  "links": [
+    {
+      "title": "A003 – Projektledarens handover",
+      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+    },
+    {
+      "title": "Drive – Projektledarens inkorg",
+      "url": "https://drive.google.com/drive/folders/1W6dB7lc6t6st2oKr4zSEj9wfwdUVaaIG"
+    },
+    {
+      "title": "GitHub – Källrepo",
+      "url": "https://github.com/markusdieterberger-alt/Strategiutveckling-3"
+    }
+  ],
+  "research": [
+    {
+      "name": "ZAC Edge Extraction 01",
+      "status": "REVISE",
+      "description": "Prime reproducerad, C4/ZAB blockerade.",
+      "url": "https://drive.google.com/file/d/1IUSeXi0RgdC-7kLUJRmmr0jqhqPXBsvf/view"
+    },
+    {
+      "name": "AMT Bias 04",
+      "status": "PAUS",
+      "description": "0/20 förregistrerade kandidater passerade två tidiga grindar.",
+      "url": "https://drive.google.com/file/d/1M3HN8zMVaYQ4N1MUTQJTJ_54NEA1lMqU/view"
+    }
+  ]
+}
