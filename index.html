@@ -32,7 +32,7 @@ section[hidden]{display:none!important}
 .footer{margin-top:28px;color:#8393ac;font-size:12px;line-height:1.7}
 @media(max-width:850px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.shell{padding:19px 13px 50px}.strategy-grid{grid-template-columns:1fr}.metric{padding:16px}.metric strong{font-size:25px}.panel{padding:17px}nav button{padding:9px 12px}}
-</style></head>
+</style><link rel="stylesheet" href="./live.css?v=2"></head>
 <body><div class="shell">
 <header><div><div class="eyebrow">Strategiutveckling / projektöversikt</div><h1>Command Center</h1><p class="sub">Strategier, forskning, validering och beslut – på ett ställe.</p></div><div class="pill">Senast dokumenterat: 13 okt 2026</div></header>
 <nav aria-label="Sektioner"><button class="active" data-tab="overview">Översikt</button><button data-tab="strategies">Strategier</button><button data-tab="work">Work & beslut</button><button data-tab="roadmap">Vägen till live</button></nav>
@@ -64,4 +64,4 @@ const strategies=[
 function render(id){document.getElementById(id).innerHTML=strategies.map(s=>'<article class="strategy"><div class="line"><h3>'+s.name+'</h3><span class="status '+s.kind+'">'+s.status+'</span></div><div class="description">'+s.detail+'</div><div class="meta">'+s.meta+'</div></article>').join('')}
 render('overview-strategies');render('all-strategies');
 document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==b.dataset.tab)}));
-</script></body></html>
+</script><script src="./live.js?v=2" defer></script></body></html>
