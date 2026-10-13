@@ -1,30 +1,35 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-13T19:25:00+02:00",
+  "updated_at": "2026-10-13T22:07:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
       "id": "ct",
       "name": "CT Scalper",
-      "status": "TV-TEST",
-      "priority": 1,
-      "stage": "Pine A/B/C",
-      "summary": "EAA original kontra EAB ABSORB RR≥2 och kompletterande FADE-gate. Långsiktig edge ej fastställd.",
+      "status": "QA / REGIMFORSKNING",
+      "priority": null,
+      "stage": "A/B/C körda; funded-proxy och regimstudie väntar",
+      "summary": "TradingView A/B/C och samtliga trade-CSV kontrollerade. Förbättring sedan maj 2026 är explorativ; Nasdaq-range och låg VIX är ännu ej verifierade orsakssamband. Ingen funded-passrate eller livepromotion.",
       "metrics": [
         {
-          "label": "EAA affärer",
-          "value": "1 197",
-          "note": "2024–2026"
+          "label": "A: 1 200 affärer",
+          "value": "PF 0,994",
+          "note": "−163 USD, full testperiod"
         },
         {
-          "label": "EAA PF",
-          "value": "0,984",
-          "note": "fullperiod, historiskt"
+          "label": "B: 811 affärer",
+          "value": "PF 1,039",
+          "note": "+779,50 USD, ABSORB RR≥2"
         },
         {
-          "label": "2026 PF",
-          "value": "1,207",
-          "note": "urval, ej OOS"
+          "label": "C: 702 affärer",
+          "value": "PF 1,049",
+          "note": "+871,50 USD, ABSORB+FADE"
+        },
+        {
+          "label": "B sedan maj",
+          "value": "PF 1,886",
+          "note": "+3 724,50 USD; efterhandsvalt tidsfönster"
         }
       ],
       "links": [
@@ -41,11 +46,22 @@
     {
       "id": "hma",
       "name": "HMA Midday",
-      "status": "VÄNTAR",
-      "priority": 2,
-      "stage": "Pine original ↔ execution-fixed",
-      "summary": "Båda varianterna finns, TradingView A/B och trade-export saknas.",
-      "metrics": [],
+      "status": "HOLD",
+      "priority": null,
+      "stage": "TradingView original ↔ EXEC FIXED avslutat",
+      "summary": "Original och EXEC FIXED verifierade mot fullständiga CSV-exporter; båda nettonegativa under 2025-10–2026-09. 110 matchande entries, 5 original-only vid sessionsgräns, 83 ändrade tradeutfall. Intrabar/QA och funded-proxy återstår.",
+      "metrics": [
+        {
+          "label": "Original",
+          "value": "115 affärer",
+          "note": "−737,50 USD; PF 0,913; max DD 2 217 USD"
+        },
+        {
+          "label": "EXEC FIXED",
+          "value": "110 affärer",
+          "note": "−249 USD; PF 0,964; max DD 2 506,50 USD"
+        }
+      ],
       "links": [
         {
           "title": "Original Pine",
@@ -61,9 +77,9 @@
       "id": "prime",
       "name": "AMT Micro Prime",
       "status": "REVISE",
-      "priority": 3,
-      "stage": "Pine-kompilering och parity",
-      "summary": "Source-Python exakt reproducerad. Korrigerad exekvering positiv i historik; native TradingView saknas.",
+      "priority": 1,
+      "stage": "Nästa datorpass – Pine compile → runtime → TV native parity",
+      "summary": "Python-/source-rapport finns; Pine DEV är levererad men TradingView-kompilering, runtime och orderparitet är ej verifierade. Ingen funded/livepromotion.",
       "metrics": [
         {
           "label": "Python-affärer",
@@ -148,19 +164,19 @@
   "decisions": [
     {
       "title": "CT Scalper – EAA/EAB",
-      "status": "DATOR",
-      "text": "Fullständig Strategy Tester A/B/C, identiska Properties och export av trades.",
+      "status": "TV A/B/C KLARA",
+      "text": "A 1200/PF 0,994, B 811/PF 1,039, C 702/PF 1,049. Samtliga CSV inlästa från Drive. Regim/VIX och funded-proxy fortsätter som forskning; ingen livepromotion.",
       "url": "https://docs.google.com/document/d/1giLgrbKjndSvvbbmfhHBD75DcC_boiscTYrl5Ip8k4U/edit"
     },
     {
       "title": "HMA Midday – A/B",
-      "status": "DATOR",
-      "text": "Original först, sedan execution-fixed, 15m MNQ.",
+      "status": "HOLD",
+      "text": "TV original 115/−737,50 USD/PF 0,913; EXEC FIXED 110/−249 USD/PF 0,964. 110 matchade entries; 5 original-only. Ingen promotion.",
       "url": "https://drive.google.com/file/d/1XZDOfUxcKlEayLmSRXLQJ49IkE6dKCaW/view"
     },
     {
       "title": "Prime – Pine parity",
-      "status": "DATOR",
+      "status": "NÄSTA DATORPASS",
       "text": "Kompilera DEV, jämför första signalfält och native fills.",
       "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
     },
@@ -192,6 +208,12 @@
     }
   ],
   "research": [
+    {
+      "name": "CT Scalper – marknadsregim och VIX",
+      "status": "HYPOTES / EJ VALIDERAD",
+      "description": "Starkare CT-historik från maj 2026 (B PF 1,886). Nasdaq-konsolidering och låg VIX föreslagna som möjliga förklaringar; ingen kausal gate eller framtida funded-passrate verifierad.",
+      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+    },
     {
       "name": "ZAC Recovery 01 – arbetsorder",
       "status": "BESTÄLLD / EJ STARTVERIFIERAD",
