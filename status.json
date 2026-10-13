@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-13T15:30:00+02:00",
+  "updated_at": "2026-10-13T19:23:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -99,30 +99,47 @@
     {
       "id": "xac",
       "name": "XAC Recovery",
-      "status": "FORENSIK",
+      "status": "PARTIAL RECOVERY",
       "priority": null,
-      "stage": "Historisk 60 %-utredning",
-      "summary": "Äldre 60 %-passrate är rapporterad, inte reproducerad eller bekräftad. Ingen ny scalp-optimering.",
+      "stage": "Forensik färdig · arkivering föreslagen",
+      "summary": "Historisk XAC: 67/107 PASS (62,62 %) reproducerat på ledger-/simulatornivå. Endast korrigerad Scalp-stopgap-fill sänkte PASS till 32/107 (29,91 %). Ingen verifierad edge-/funded-kandidat räddad. Rekommendation: avsluta aktivt XAC-spår; operatörens arkiveringsbeslut återstår.",
       "metrics": [
         {
-          "label": "Rapporterat",
-          "value": ">60 %",
-          "note": "15 dagar, obevisad källa"
+          "label": "Äldre PASS 15d",
+          "value": "62,62 %",
+          "note": "67/107 överlappande, ej verklig funded"
         },
         {
-          "label": "Pine Scalp",
-          "value": "2 273",
-          "note": "referens, parity fail"
+          "label": "Gapkorrigerad PASS",
+          "value": "29,91 %",
+          "note": "32/107; samma logg/simulator"
         },
         {
-          "label": "Python Scalp",
-          "value": "1 937",
-          "note": "referens, parity fail"
+          "label": "Konservativ proxy",
+          "value": "19,63 %",
+          "note": "21/107; FAIL 56,07 %"
+        },
+        {
+          "label": "Core PF",
+          "value": "0,936",
+          "note": "2 101 affärer; 2019–2026"
         }
       ],
       "links": [
         {
-          "title": "A003 Handover",
+          "title": "Executive Decision",
+          "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
+        },
+        {
+          "title": "Funded Reconciliation",
+          "url": "https://drive.google.com/file/d/1bUT1uqwlhOsiyVXeHr8XYQQuv7Ivue7b/view"
+        },
+        {
+          "title": "Module Attribution",
+          "url": "https://drive.google.com/file/d/1GMZkVo8-b0s8K8pH_t_G05sFqf176iy8/view"
+        },
+        {
+          "title": "A003",
           "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
         }
       ]
@@ -148,10 +165,10 @@
       "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
     },
     {
-      "title": "XAC 60 %-recovery",
-      "status": "UNDERLAG",
-      "text": "Sök originalgenerator, fundingregler och förklara äldre passrate innan nya investeringar.",
-      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+      "title": "XAC Recovery – beslut om arkivering",
+      "status": "BESLUT",
+      "text": "PARTIAL RECOVERY: 62,62 % återställd som bokförd proxy, men stopgapkorrektion sänker PASS till 29,91 %. Work rekommenderar att stoppa XAC som aktivt funded-spår. Invaktar operatörens slutbeslut.",
+      "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
     }
   ],
   "links": [
@@ -169,6 +186,12 @@
     }
   ],
   "research": [
+    {
+      "name": "XAC Recovery 01",
+      "status": "PARTIAL RECOVERY",
+      "description": "62,62 % legacy PASS återräknat; 29,91 % efter stopgapfix. Ingen räddad funded-kandidat.",
+      "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
+    },
     {
       "name": "ZAC Edge Extraction 01",
       "status": "REVISE",
