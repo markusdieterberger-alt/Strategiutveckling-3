@@ -169,6 +169,12 @@
       "status": "STÄNGD",
       "text": "Operatören har formellt godkänt att avsluta XAC som aktivt funded-utvecklingsspår. Ingen ny optimering. Historisk kod och resultat bevaras.",
       "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
+    },
+    {
+      "title": "ZAC Recovery 01 – inväntar Work",
+      "status": "ARBETSORDER",
+      "text": "Källgrind → isolerade fill-/simulatorinterventioner → funded bara vid reproducerbara loggar. Work-körning ej verifierad.",
+      "url": "https://docs.google.com/document/d/1mHyGRaP6P1q2j-uLiBDptGEvPTTRdl_6niQzo1IZ4KA/edit"
     }
   ],
   "links": [
@@ -186,6 +192,12 @@
     }
   ],
   "research": [
+    {
+      "name": "ZAC Recovery 01 – arbetsorder",
+      "status": "BESTÄLLD / EJ STARTVERIFIERAD",
+      "description": "Forensisk edge-, execution- och funded-granskning av C4, Prime och ZAB. Ingen XAC-60%-siffra ärvs.",
+      "url": "https://docs.google.com/document/d/1mHyGRaP6P1q2j-uLiBDptGEvPTTRdl_6niQzo1IZ4KA/edit"
+    },
     {
       "name": "XAC Recovery 01",
       "status": "PARTIAL RECOVERY",
