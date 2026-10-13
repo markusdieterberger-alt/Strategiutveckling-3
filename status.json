@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-13T19:23:00+02:00",
+  "updated_at": "2026-10-13T19:25:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -99,10 +99,10 @@
     {
       "id": "xac",
       "name": "XAC Recovery",
-      "status": "PARTIAL RECOVERY",
+      "status": "ARKIVERAD",
       "priority": null,
-      "stage": "Forensik färdig · arkivering föreslagen",
-      "summary": "Historisk XAC: 67/107 PASS (62,62 %) reproducerat på ledger-/simulatornivå. Endast korrigerad Scalp-stopgap-fill sänkte PASS till 32/107 (29,91 %). Ingen verifierad edge-/funded-kandidat räddad. Rekommendation: avsluta aktivt XAC-spår; operatörens arkiveringsbeslut återstår.",
+      "stage": "Stängd genom operatörsbeslut 2026-10-13",
+      "summary": "XAC Recovery 01 avslutad: 62,62 % legacy PASS återräknat på ledgernivå, 29,91 % efter korrekt Scalp-stopgap. Ingen verifierad funded-edge räddad. Operatören har formellt godkänt arkivering. Återupptas endast efter nytt uttryckligt beslut och nya originalkällor.",
       "metrics": [
         {
           "label": "Äldre PASS 15d",
@@ -165,9 +165,9 @@
       "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
     },
     {
-      "title": "XAC Recovery – beslut om arkivering",
-      "status": "BESLUT",
-      "text": "PARTIAL RECOVERY: 62,62 % återställd som bokförd proxy, men stopgapkorrektion sänker PASS till 29,91 %. Work rekommenderar att stoppa XAC som aktivt funded-spår. Invaktar operatörens slutbeslut.",
+      "title": "XAC Recovery – arkiverad",
+      "status": "STÄNGD",
+      "text": "Operatören har formellt godkänt att avsluta XAC som aktivt funded-utvecklingsspår. Ingen ny optimering. Historisk kod och resultat bevaras.",
       "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
     }
   ],
