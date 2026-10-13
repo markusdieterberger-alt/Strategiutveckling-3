@@ -1,0 +1,575 @@
+//@version=6
+// PRIME-PINE-V1-DEV | AMT MICRO PRIME 02 | 2026-10-13
+// COMPILE NOT VERIFIED. Actual TradingView parity NOT VERIFIED.
+// Source hashes and immutable rules: prime02/SOURCE_SHA256.json + PROTOCOL_LOCK.md.
+// Native broker ledger is real; conservative SL-first Python ledger is separate.
+strategy("PRIME-PINE-V1-DEV [COMPILE NOT VERIFIED]", overlay = true, precision = 10, pyramiding = 0, initial_capital = 1000000, default_qty_type = strategy.fixed, default_qty_value = 1, commission_type = strategy.commission.cash_per_contract, commission_value = 2, slippage = 0, margin_long = 0, margin_short = 0, calc_on_order_fills = false, calc_on_every_tick = false, process_orders_on_close = false, use_bar_magnifier = false, max_bars_back = 10, max_labels_count = 50)
+
+// Operational/diagnostic inputs only. Economic thresholds are frozen constants.
+bool coldStartQA = input.bool(false, "Allow chart-start state (matched-slice QA only)")
+bool canonicalEpochQA = input.bool(false, "Continuous symbol: explicit historical epoch QA")
+string epochText = input.string("", "Epoch starts UTC milliseconds, comma separated; from supplied CSV")
+bool verbose = input.bool(false, "Log raw signals and native closed trades")
+bool stopOnException = input.bool(true, "Block new orders after native execution exception")
+int evaluateFrom = input.time(timestamp("05 May 2019 22:03 +0000"), "First signal allowed (state still warms before)")
+int evaluateUntil = input.time(timestamp("01 Jan 2099 00:00 +0000"), "Last signal allowed")
+int sourceStart = timestamp("05 May 2019 22:03 +0000")
+float TICK = 0.25
+string NY = "America/New_York"
+
+type B3
+    int t
+    float h
+    float l
+    float c
+    int epoch
+    int gaps
+
+type HTF
+    int t
+    float h
+    float l
+    int epoch
+
+type FVG
+    float key
+    float target
+    int gid
+    int tf
+    int start
+    int known
+    int epoch
+    bool calendarOk
+    bool bull
+
+type TFState
+    int mins
+    int key
+    int count
+    int first
+    int last
+    float h
+    float l
+    int epoch
+    array<HTF> past
+
+// Compare sign after scale to retain sub-1e-9 source differences in Pine comparisons.
+f_pos(float x) =>
+    x * 1e12 > 0
+f_ge(float a, float b) =>
+    not f_pos(b - a)
+f_le(float a, float b) =>
+    not f_pos(a - b)
+
+// Positive CPython //, not floor(a/b). q is bounded to approx 0..200 here.
+// Product error is computed without relying on a rounded equality comparison.
+f_bin(float a, float b) =>
+    int q = int(math.floor(a / b))
+    float p = q * b
+    float split = 134217729.0 * b
+    float hi = split - (split - b)
+    float lo = b - hi
+    float err = (q * hi - p) + q * lo
+    float residual = (a - p) - err
+    if f_pos(-residual)
+        q -= 1
+    else if f_ge(residual, b)
+        q += 1
+    math.max(0, math.min(199, q))
+
+f_profile(array<B3> buf, int a, int z) =>
+    float lo = 1e100
+    float hi = -1e100
+    for j = a to z
+        B3 b = array.get(buf, j)
+        lo := math.min(lo, b.l)
+        hi := math.max(hi, b.h)
+    float poc = lo
+    float val = lo
+    float vah = hi
+    float shape = 1.0
+    if f_pos(hi - lo)
+        float w = (hi - lo) / 200.0
+        array<float> diff = array.new_float(201, 0.0)
+        array<float> hist = array.new_float(200, 0.0)
+        for j = a to z
+            B3 b = array.get(buf, j)
+            int x = f_bin(b.l - lo, w)
+            int y = f_bin(b.h - lo, w)
+            array.set(diff, x, array.get(diff, x) + 1.0)
+            if y + 1 < 200
+                array.set(diff, y + 1, array.get(diff, y + 1) - 1.0)
+        float run = 0.0
+        float total = 0.0
+        float mx = -1.0
+        int pk = 0
+        for j = 0 to 199
+            run += array.get(diff, j)
+            array.set(hist, j, run)
+            total += run
+            if run > mx
+                mx := run
+                pk := j
+        int left = pk
+        int right = pk
+        float covered = array.get(hist, pk)
+        while f_pos(0.70 * total - covered) and (left > 0 or right < 199)
+            float lv = left > 0 ? array.get(hist, left - 1) : -1.0
+            float rv = right < 199 ? array.get(hist, right + 1) : -1.0
+            if lv >= rv
+                left -= 1
+                covered += array.get(hist, left)
+            else
+                right += 1
+                covered += array.get(hist, right)
+        poc := lo + (pk + 0.5) * w
+        val := lo + left * w
+        vah := lo + (right + 1) * w
+        shape := (vah - val) / (hi - lo)
+    [poc, val, vah, shape]
+
+f_less(FVG a, FVG b) =>
+    a.key < b.key or (a.key == b.key and a.gid < b.gid)
+f_push(array<FVG> heap, FVG item) =>
+    if array.size(heap) >= 20000
+        runtime.error("FVG capacity exceeded; no silent truncation. REVISE.")
+    array.push(heap, item)
+    int j = array.size(heap) - 1
+    while j > 0
+        int parent = int(math.floor((j - 1) / 2))
+        if f_less(array.get(heap, j), array.get(heap, parent))
+            FVG tmp = array.get(heap, parent)
+            array.set(heap, parent, array.get(heap, j))
+            array.set(heap, j, tmp)
+            j := parent
+        else
+            break
+    true
+f_pop(array<FVG> heap) =>
+    FVG root = array.get(heap, 0)
+    FVG tail = array.pop(heap)
+    int n = array.size(heap)
+    if n > 0
+        array.set(heap, 0, tail)
+        int j = 0
+        while 2 * j + 1 < n
+            int child = 2 * j + 1
+            if child + 1 < n and f_less(array.get(heap, child + 1), array.get(heap, child))
+                child += 1
+            if f_less(array.get(heap, child), array.get(heap, j))
+                FVG tmp = array.get(heap, j)
+                array.set(heap, j, array.get(heap, child))
+                array.set(heap, child, tmp)
+                j := child
+            else
+                break
+    root
+
+f_update_tf(TFState s, B3 b) =>
+    int span = s.mins * 60000
+    int key = int(math.floor(b.t / span))
+    if na(s.key) or key != s.key
+        s.key := key
+        s.count := 0
+        s.first := b.t
+        s.last := b.t - 180000
+        s.h := b.h
+        s.l := b.l
+        s.epoch := b.epoch
+    s.count += 1
+    s.h := math.max(s.h, b.h)
+    s.l := math.min(s.l, b.l)
+    if b.t - s.last != 180000
+        s.count := -100000
+    s.last := b.t
+    FVG created = na
+    int known = b.t + 180000
+    if known % span == 0 and s.count == s.mins / 3 and s.first == key * span
+        if array.size(s.past) >= 2
+            HTF old = array.get(s.past, 0)
+            bool bull = f_pos(s.l - old.h)
+            bool bear = f_pos(old.l - s.h)
+            if bull or bear
+                float target = bull ? s.l : s.h
+                created := FVG.new(bull ? -target : target, target, 0, s.mins, old.t, known, old.epoch, known - old.t == 3 * span, bull)
+        array.push(s.past, HTF.new(s.first, s.h, s.l, s.epoch))
+        if array.size(s.past) > 2
+            array.shift(s.past)
+    created
+
+var array<int> epochs = array.new_int()
+var int epochPointer = 0
+var int epoch = 0
+var int firstLoaded = time
+var bool continuous = str.contains(syminfo.ticker, "!")
+var bool seriesModeOK = not continuous or canonicalEpochQA
+if barstate.isfirst
+    if timeframe.in_seconds() != 60 or not chart.is_standard
+        runtime.error("Use standard 1-minute candles.")
+    if math.abs(syminfo.mintick - TICK) > 0.000001 or math.abs(syminfo.pointvalue - 2.0) > 0.000001
+        runtime.error("This fixed-quantity strategy requires MNQ: tick0.25, USD2/point.")
+    if str.length(epochText) > 0
+        array<string> chunks = str.split(epochText, ",")
+        for chunk in chunks
+            float parsed = str.tonumber(str.trim(chunk))
+            if na(parsed)
+                runtime.error("Invalid UTC-millisecond epoch list.")
+            array.push(epochs, int(parsed))
+        if array.size(epochs) > 1000
+            runtime.error("Epoch capacity exceeded.")
+        if array.size(epochs) > 1
+            for j = 1 to array.size(epochs) - 1
+                if array.get(epochs, j) <= array.get(epochs, j - 1)
+                    runtime.error("Epoch list must be strictly increasing.")
+    if continuous and canonicalEpochQA and array.size(epochs) == 0
+        runtime.error("Canonical epoch QA requires explicit epoch CSV; do not infer roll from price gaps.")
+
+var array<B3> window = array.new<B3>()
+var array<FVG> bullHeap = array.new<FVG>()
+var array<FVG> bearHeap = array.new<FVG>()
+var array<TFState> higher = array.new<TFState>()
+if barstate.isfirst
+    array.push(higher, TFState.new(15, na, 0, 0, 0, na, na, 0, array.new<HTF>()))
+    array.push(higher, TFState.new(30, na, 0, 0, 0, na, na, 0, array.new<HTF>()))
+    array.push(higher, TFState.new(60, na, 0, 0, 0, na, na, 0, array.new<HTF>()))
+
+var int gapCount = 0
+var int key3 = na
+var int count3 = 0
+var int first3 = 0
+var int last3 = 0
+var int epoch3 = 0
+var float hi3 = na
+var float lo3 = na
+var int n3 = 0
+var float previous3Close = na
+var float trSum = 0.0
+var float atr = na
+var int phase = 0
+var int oob = 0
+var float oobClose = na
+var float oldPoc = na
+var float oldVal = na
+var float oldVah = na
+var float oldBval = na
+var float oldBvah = na
+var int oldProfileStart = 0
+var int oldProfileEnd = 0
+var int oldEpoch = 0
+var int oldGap = 0
+var int gid = 0
+var int acceptCount = 0
+var int rawCount = 0
+var int validTargetCount = 0
+var int tfGateCount = 0
+var int distanceCount = 0
+var int continuityVeto = 0
+var int positionBlocked = 0
+var int geometryBlocked = 0
+var int placed = 0
+var int nativeClosed = 0
+var int exceptions = 0
+var int maxWindow = 0
+var int maxBull = 0
+var int maxBear = 0
+var float activeSL = na
+var float activeTP = na
+var int activeDir = 0
+var int orderKnown = 0
+var int deadline = 0
+var int orderEpoch = 0
+var int submittedBar = na
+var bool haveOrder = false
+var bool checkedFill = false
+
+// Diagnostics are emitted on the chart bar ending at signal_known_ms.
+float dTime = na
+float dDir = na
+float dPoc = na
+float dVal = na
+float dVah = na
+float dNewPoc = na
+float dTarget = na
+float dTF = na
+float dSL = na
+float dRaw = na
+float dCont = na
+float dDist = na
+float dFvgStart = na
+float dFvgKnown = na
+float dProfStart = na
+float dProfEnd = na
+float dOrder = na
+bool markOrder = false
+
+if barstate.isconfirmed
+    while epochPointer < array.size(epochs) and time >= array.get(epochs, epochPointer)
+        epoch := epochPointer
+        epochPointer += 1
+    bool minuteGap = not na(time[1]) and time != time[1] + 60000
+    if minuteGap
+        gapCount += 1
+
+    // Native order exceptions are audited, never rewritten into invented fills.
+    // With calc_on_order_fills=false these are detected at confirmed bar close.
+    if haveOrder and bar_index > submittedBar and not checkedFill
+        bool badTime = time != orderKnown
+        bool badContract = epoch != orderEpoch
+        bool badGeometry = not f_pos(activeDir * (open - activeSL)) or not f_pos(activeDir * (activeTP - open))
+        if badTime or badContract or badGeometry
+            exceptions += 1
+            strategy.cancel_all()
+            if strategy.position_size != 0
+                strategy.close_all(comment = "NATIVE_ENTRY_EXCEPTION", immediately = true)
+            if verbose
+                log.warning("PRIME_EXCEPTION|entry|{0}|late={1}|epoch={2}|geometry={3}", time, badTime, badContract, badGeometry)
+        checkedFill := true
+    if strategy.position_size != 0
+        if minuteGap or epoch != orderEpoch
+            exceptions += 1
+            strategy.cancel_all()
+            strategy.close_all(comment = "NATIVE_CONTINUITY_EXCEPTION", immediately = true)
+        else if time_close >= deadline
+            strategy.cancel("PX")
+            strategy.close_all(comment = "TIME", immediately = true)
+    if haveOrder and bar_index > submittedBar
+        bool hitSL = activeDir == 1 ? low <= activeSL : high >= activeSL
+        bool hitTP = activeDir == 1 ? high >= activeTP : low <= activeTP
+        if hitSL and hitTP
+            exceptions += 1
+            if verbose
+                log.warning("PRIME_EXCEPTION|OHLC_BOTH|{0}", time)
+        if activeDir * (open - activeTP) > 0
+            exceptions += 1
+            if verbose
+                log.warning("PRIME_EXCEPTION|TP_GAP_IMPROVEMENT|{0}", time)
+
+    // Central ledger captures same-bar round trips invisible in position transitions.
+    if strategy.closedtrades > nativeClosed
+        for j = nativeClosed to strategy.closedtrades - 1
+            if verbose
+                int exitOffset = bar_index - strategy.closedtrades.exit_bar_index(j)
+                if exitOffset > 9
+                    runtime.error("Unexpected delayed native ledger update; inspect exit bar timestamp.")
+                log.info("PRIME_TRADE|{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}|exit_bar_ms={8}|stop={9}|target={10}", strategy.closedtrades.entry_time(j), strategy.closedtrades.exit_time(j), strategy.closedtrades.size(j), strategy.closedtrades.entry_price(j), strategy.closedtrades.exit_price(j), strategy.closedtrades.exit_comment(j), strategy.closedtrades.profit(j), strategy.closedtrades.commission(j), time[exitOffset], activeSL, activeTP)
+        nativeClosed := strategy.closedtrades
+    if haveOrder and checkedFill and strategy.position_size == 0
+        haveOrder := false
+
+    int bucket = int(math.floor(time / 180000))
+    if na(key3) or bucket != key3
+        key3 := bucket
+        count3 := 0
+        first3 := time
+        last3 := time - 60000
+        epoch3 := epoch
+        hi3 := high
+        lo3 := low
+    count3 += 1
+    if time != last3 + 60000
+        count3 := -100000
+    last3 := time
+    hi3 := math.max(hi3, high)
+    lo3 := math.min(lo3, low)
+    bool complete3 = time_close % 180000 == 0 and count3 == 3 and first3 == bucket * 180000
+    if complete3
+        B3 b = B3.new(first3, hi3, lo3, close, epoch3, gapCount)
+        array.push(window, b)
+        int i = array.size(window) - 1
+        maxWindow := math.max(maxWindow, array.size(window))
+        if array.size(window) > 80000
+            runtime.error("Profile capacity exceeded; original anchor not truncated. REVISE.")
+        float priorAtr = atr
+        float tr = n3 == 0 ? hi3 - lo3 : math.max(hi3 - lo3, math.max(math.abs(hi3 - previous3Close), math.abs(lo3 - previous3Close)))
+        n3 += 1
+        if n3 <= 14
+            trSum += tr
+            if n3 == 14
+                atr := trSum / 14.0
+        else
+            atr := (atr * 13.0 + tr) / 14.0
+        previous3Close := close
+
+        // SOURCE pruning occurs BEFORE adding FVG created on this 3m close.
+        while array.size(bullHeap) > 0
+            if -array.get(bullHeap, 0).key >= lo3
+                f_pop(bullHeap)
+            else
+                break
+        while array.size(bearHeap) > 0
+            if array.get(bearHeap, 0).key <= hi3
+                f_pop(bearHeap)
+            else
+                break
+        for s in higher
+            FVG newFvg = f_update_tf(s, b)
+            if not na(newFvg)
+                gid += 1
+                newFvg.gid := gid
+                f_push(newFvg.bull ? bullHeap : bearHeap, newFvg)
+        maxBull := math.max(maxBull, array.size(bullHeap))
+        maxBear := math.max(maxBear, array.size(bearHeap))
+
+        bool accepted = false
+        int direction = 0
+        float acceptedPoc = na
+        if n3 >= 14
+            if phase == 0
+                if i >= 9
+                    [p, v, hh, sp] = f_profile(window, 0, i - 1)
+                    float blo = v - priorAtr
+                    float bhi = hh + priorAtr
+                    if f_pos(close - bhi) or f_pos(blo - close)
+                        phase := f_pos(close - bhi) ? 1 : -1
+                        oldPoc := p
+                        oldVal := v
+                        oldVah := hh
+                        oldBval := blo
+                        oldBvah := bhi
+                        oldProfileStart := array.get(window, 0).t
+                        oldProfileEnd := array.get(window, i - 1).t + 180000
+                        oldEpoch := array.get(window, 0).epoch
+                        oldGap := array.get(window, 0).gaps
+                        oob := i
+                        oobClose := close
+            else
+                if f_ge(close, oldBval) and f_le(close, oldBvah)
+                    phase := 0
+                else if i - oob + 1 >= 9
+                    int startNew = math.max(oob, i - 49)
+                    [p2, v2, h2, shape] = f_profile(window, startNew, i)
+                    if f_ge(shape, 0.30) and f_le(shape, 0.85)
+                        accepted := phase == 1 ? f_pos(p2 - oldBvah) : f_pos(oldBval - p2)
+                        direction := phase
+                        acceptedPoc := p2
+                        // Exact source reanchor even when POC acceptance gate fails.
+                        if startNew > 0
+                            for j = 1 to startNew
+                                array.shift(window)
+                        phase := 0
+        if accepted
+            acceptCount += 1
+            FVG targetFvg = na
+            if direction == 1 and array.size(bearHeap) > 0
+                FVG f = array.get(bearHeap, 0)
+                if f_pos(f.target - close)
+                    targetFvg := f
+            if direction == -1 and array.size(bullHeap) > 0
+                FVG f = array.get(bullHeap, 0)
+                if f_pos(close - f.target)
+                    targetFvg := f
+            bool valid = not na(targetFvg) and f_pos(oldVah - oldVal)
+            bool tfOK = false
+            bool distOK = false
+            bool contOK = false
+            float target = na
+            float distance = na
+            if valid
+                validTargetCount += 1
+                target := targetFvg.target
+                tfOK := targetFvg.tf == 15
+                distance := math.abs(target - close) / (oldVah - oldVal)
+                distOK := f_le(distance, 1.0)
+                contOK := oldGap == gapCount and oldEpoch == epoch and targetFvg.calendarOk and targetFvg.epoch == epoch
+                if tfOK
+                    tfGateCount += 1
+                    if distOK
+                        distanceCount += 1
+            int nyHour = hour(time_close, NY)
+            bool raw = valid and tfOK and distOK and (nyHour == 9 or nyHour == 10)
+            float rawStop = oldPoc - direction * TICK
+            float stop = direction == 1 ? math.floor(rawStop / TICK) * TICK : math.ceil(rawStop / TICK) * TICK
+            dTime := time_close
+            dDir := direction
+            dPoc := oldPoc
+            dVal := oldVal
+            dVah := oldVah
+            dNewPoc := acceptedPoc
+            dTarget := target
+            dTF := valid ? targetFvg.tf : 0
+            dSL := stop
+            dRaw := raw ? 1 : 0
+            dCont := contOK ? 1 : 0
+            dDist := distance
+            dFvgStart := valid ? targetFvg.start : na
+            dFvgKnown := valid ? targetFvg.known : na
+            dProfStart := oldProfileStart
+            dProfEnd := oldProfileEnd
+            dOrder := 0
+            if raw
+                rawCount += 1
+                if verbose
+                    log.info("PRIME_SIGNAL|{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}", time_close, direction, oldPoc, oldVal, oldVah, target, stop, contOK)
+                bool geometryOK = f_pos(direction * (close - stop)) and f_pos(direction * (target - close))
+                bool stateOK = firstLoaded == sourceStart or coldStartQA
+                bool scopeOK = time_close >= evaluateFrom and time_close <= evaluateUntil and seriesModeOK and stateOK
+                bool runtimeOK = not stopOnException or exceptions == 0
+                if not contOK
+                    continuityVeto += 1
+                else if strategy.position_size != 0 or haveOrder
+                    positionBlocked += 1
+                else if not geometryOK
+                    geometryBlocked += 1
+                else if scopeOK and runtimeOK
+                    activeSL := stop
+                    activeTP := target
+                    activeDir := direction
+                    orderKnown := time_close
+                    orderEpoch := epoch
+                    int flat = timestamp(NY, year(time_close, NY), month(time_close, NY), dayofmonth(time_close, NY), 16, 45)
+                    deadline := math.min(time_close + 240 * 60000, flat)
+                    strategy.entry("PRIME", direction == 1 ? strategy.long : strategy.short, qty = 1, comment = "PRIME_NEXT_OPEN")
+                    strategy.exit("PX", "PRIME", stop = activeSL, limit = activeTP, comment_loss = "SL", comment_profit = "TP")
+                    submittedBar := bar_index
+                    haveOrder := true
+                    checkedFill := false
+                    placed += 1
+                    markOrder := true
+                    dOrder := 1
+
+plot(dTime, "signal_known_ms", display = display.data_window)
+plot(dDir, "direction", display = display.data_window)
+plot(dPoc, "old_poc", display = display.data_window)
+plot(dVal, "old_val", display = display.data_window)
+plot(dVah, "old_vah", display = display.data_window)
+plot(dNewPoc, "new_poc", display = display.data_window)
+plot(dTarget, "target", display = display.data_window)
+plot(dTF, "target_tf", display = display.data_window)
+plot(dSL, "stop_tick", display = display.data_window)
+plot(dRaw, "raw_signal", display = display.data_window)
+plot(dCont, "continuity_ok", display = display.data_window)
+plot(dDist, "target_va", display = display.data_window)
+plot(dFvgStart, "fvg_start_ms", display = display.data_window)
+plot(dFvgKnown, "fvg_known_ms", display = display.data_window)
+plot(dProfStart, "profile_start_ms", display = display.data_window)
+plot(dProfEnd, "profile_end_ms", display = display.data_window)
+plot(dOrder, "order_submitted", display = display.data_window)
+plot(haveOrder ? activeSL : na, "Active structural SL", color = color.red, style = plot.style_linebr)
+plot(haveOrder ? activeTP : na, "Frozen FVG target", color = color.green, style = plot.style_linebr)
+plotshape(markOrder, title = "Native order submitted", style = shape.triangleup, location = location.belowbar, size = size.tiny, color = color.aqua)
+var table dashboard = table.new(position.top_right, 2, 12, bgcolor = color.new(color.black, 15))
+if barstate.islast
+    table.cell(dashboard, 0, 0, "PRIME DEV / UNVERIFIED", text_color = color.orange)
+    table.cell(dashboard, 1, 0, "1 MNQ / 2p RT", text_color = color.white)
+    table.cell(dashboard, 0, 1, "3m / accept", text_color = color.white)
+    table.cell(dashboard, 1, 1, str.tostring(n3) + " / " + str.tostring(acceptCount), text_color = color.white)
+    table.cell(dashboard, 0, 2, "Target / TF15 / distance", text_color = color.white)
+    table.cell(dashboard, 1, 2, str.tostring(validTargetCount) + "/" + str.tostring(tfGateCount) + "/" + str.tostring(distanceCount), text_color = color.white)
+    table.cell(dashboard, 0, 3, "Raw / continuity veto", text_color = color.white)
+    table.cell(dashboard, 1, 3, str.tostring(rawCount) + " / " + str.tostring(continuityVeto), text_color = color.white)
+    table.cell(dashboard, 0, 4, "Position / geometry block", text_color = color.white)
+    table.cell(dashboard, 1, 4, str.tostring(positionBlocked) + " / " + str.tostring(geometryBlocked), text_color = color.white)
+    table.cell(dashboard, 0, 5, "Orders / native closes", text_color = color.white)
+    table.cell(dashboard, 1, 5, str.tostring(placed) + " / " + str.tostring(nativeClosed), text_color = color.white)
+    table.cell(dashboard, 0, 6, "Native exceptions", text_color = color.white)
+    table.cell(dashboard, 1, 6, str.tostring(exceptions), text_color = exceptions > 0 ? color.red : color.white)
+    table.cell(dashboard, 0, 7, "Max profile / heaps", text_color = color.white)
+    table.cell(dashboard, 1, 7, str.tostring(maxWindow) + "/" + str.tostring(maxBull) + "/" + str.tostring(maxBear), text_color = color.white)
+    table.cell(dashboard, 0, 8, "Loaded state start", text_color = color.white)
+    table.cell(dashboard, 1, 8, str.format_time(firstLoaded, "yyyy-MM-dd HH:mm", "UTC"), text_color = color.white)
+    table.cell(dashboard, 0, 9, "Source start / cold QA", text_color = color.white)
+    table.cell(dashboard, 1, 9, firstLoaded == sourceStart ? "SOURCE START" : (coldStartQA ? "COLD QA ONLY" : "BLOCKED"), text_color = color.orange)
+    table.cell(dashboard, 0, 10, "Contract mode", text_color = color.white)
+    table.cell(dashboard, 1, 10, continuous ? (canonicalEpochQA ? "EPOCH QA ONLY" : "BLOCKED") : "NAMED CONTRACT", text_color = color.orange)
+    table.cell(dashboard, 0, 11, "Parity / promotion", text_color = color.white)
+    table.cell(dashboard, 1, 11, "NOT VERIFIED / NONE", text_color = color.orange)
