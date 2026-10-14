@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-14T07:45:00+02:00",
+  "updated_at": "2026-10-14T20:45:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -8,8 +8,8 @@
       "name": "CT Scalper",
       "status": "QA / REGIMFORSKNING",
       "priority": null,
-      "stage": "A/B/C körda; funded-proxy och regimstudie väntar",
-      "summary": "A/B/C TradingView CSV och exekveringsforskning klara; CT B + Prime02 funded EOD-ledger-proxy sedan maj körd. 2 CT MNQ: 35 PASS/5 FAIL/58 OPEN (98 starter); tillägg 1 Prime: 34 PASS/10 FAIL/54 OPEN. Ingen robust integrationsfördel, ingen promotion.",
+      "stage": "A/B/C körda; footprint-historik äldre än laddad 1m-period ej verifierad",
+      "summary": "A/B/C TradingView CSV och exekveringsforskning klara; CT B + Prime02 funded EOD-ledger-proxy sedan maj körd. 2 CT MNQ: 35 PASS/5 FAIL/58 OPEN (98 starter); tillägg 1 Prime: 34 PASS/10 FAIL/54 OPEN. Ingen robust integrationsfördel, ingen promotion. Footprint-audit 2026-10-14: 24 700/24 700 laddade 1m-bars med footprint, 0 saknade, första laddade 2026-09-20. Detta fastställer INTE täckning/kvalitet 2024–2026 eller orsaken till majförbättringen. CT fortsatt QA, ej promotion.",
       "metrics": [
         {
           "label": "A: 1 200 affärer",
@@ -40,6 +40,10 @@
         {
           "title": "EAB RR-gate kod",
           "url": "https://github.com/markusdieterberger-alt/Strategiutveckling-3/blob/eaa/rr-gate-dev-20261011/eaa_ct_scalper/EAB_CT_SCALPER_RR_GATE_DEV_V1.pine"
+        },
+        {
+          "title": "A003 – CT footprint-hypotes och observationsgräns",
+          "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
         }
       ]
     },
@@ -273,6 +277,12 @@
       "status": "PAUS",
       "description": "0/20 förregistrerade kandidater passerade två tidiga grindar.",
       "url": "https://drive.google.com/file/d/1M3HN8zMVaYQ4N1MUTQJTJ_54NEA1lMqU/view"
+    },
+    {
+      "name": "CT Scalper – historisk footprint-täckning",
+      "status": "HYPOTES / TV-AUDIT VÄNTAR",
+      "description": "Premium MNQ1! 1m: separat testindikator visade 24 700 tillgängliga av 24 700 laddade bars, 0 saknade, första laddade 2026-09-20. Inget bevis om äldre 2024–2026-täckning, historisk upplösning eller varför CT förbättras från maj 2026. EAA-koden har na-fallback och elvabars-guards; fullständig äldre TV/Deep Backtesting-audit återstår, ingen ändring av strategi.",
+      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
     }
   ]
 }
