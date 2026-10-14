@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-13T22:07:00+02:00",
+  "updated_at": "2026-10-14T07:25:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -159,6 +159,36 @@
           "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
         }
       ]
+    },
+    {
+      "id": "c4",
+      "name": "C4 – ZAC Recovery",
+      "status": "ARKIVERAD",
+      "priority": null,
+      "stage": "Operatörsbeslut 2026-10-14, ZAC Recovery 01",
+      "summary": "C4-kandidaten arkiverad efter forensiskt exekveringsfynd: Work uppger 376 originalaffärer reproducerade; korrigerad annullering/fill ändrar netto +1516 till −788 punkter efter 2p friktion. Ingen promotion, ingen vidare optimering. Historisk kod och evidens bevaras.",
+      "metrics": [
+        {
+          "label": "Original rapport",
+          "value": "+1 516p",
+          "note": "Work forensic; före kritisk orderfix"
+        },
+        {
+          "label": "Korrigerad",
+          "value": "−788p",
+          "note": "Work forensic; 2p friktion, ej självständigt omräknad"
+        }
+      ],
+      "links": [
+        {
+          "title": "ZAC Recovery Executive Decision",
+          "url": "https://drive.google.com/file/d/1GrzjiM-r--ovKxT1gSJJVuFEMK0TGM4l/view"
+        },
+        {
+          "title": "Execution Reconciliation",
+          "url": "https://drive.google.com/file/d/1U446At3KdfmIXkYPoIX1z4MaM4d8GoPq/view"
+        }
+      ]
     }
   ],
   "decisions": [
@@ -187,10 +217,10 @@
       "url": "https://drive.google.com/file/d/1uMnOKZo3gU22KP-NWewkCHHQsHk0dJwf/view"
     },
     {
-      "title": "ZAC Recovery 01 – inväntar Work",
-      "status": "ARBETSORDER",
-      "text": "Källgrind → isolerade fill-/simulatorinterventioner → funded bara vid reproducerbara loggar. Work-körning ej verifierad.",
-      "url": "https://docs.google.com/document/d/1mHyGRaP6P1q2j-uLiBDptGEvPTTRdl_6niQzo1IZ4KA/edit"
+      "title": "ZAC Recovery 01 – PARTIAL RECOVERY / C4 arkiverad",
+      "status": "BESLUT",
+      "text": "Work levererat PARTIAL RECOVERY. Operatörens explicita beslut: arkivera C4. Prime separat QA; ZAB SOURCE BLOCKED. C4-vinsten berodde på annullering/fill-orderfel: +1516→−788 punkter efter 2p enligt Work.",
+      "url": "https://drive.google.com/file/d/1GrzjiM-r--ovKxT1gSJJVuFEMK0TGM4l/view"
     }
   ],
   "links": [
@@ -216,8 +246,8 @@
     },
     {
       "name": "ZAC Recovery 01 – arbetsorder",
-      "status": "BESTÄLLD / EJ STARTVERIFIERAD",
-      "description": "Forensisk edge-, execution- och funded-granskning av C4, Prime och ZAB. Ingen XAC-60%-siffra ärvs.",
+      "status": "KLAR / PARTIAL RECOVERY",
+      "description": "Work rapporterad leverans. C4 arkiverad genom operatörsbeslut, Prime fortsatt QA, ZAB och portfölj blocked utan källor.",
       "url": "https://docs.google.com/document/d/1mHyGRaP6P1q2j-uLiBDptGEvPTTRdl_6niQzo1IZ4KA/edit"
     },
     {
