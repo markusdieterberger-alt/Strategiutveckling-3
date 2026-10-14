@@ -18,20 +18,25 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install dependencies
-        run: python -m pip install --disable-pip-version-check numpy pandas gdown
-      - name: Download canonical MGC 1m from Drive
+        run: python -m pip install --disable-pip-version-check numpy pandas google-auth requests
+      - name: Check private Google credentials configured
         env:
-          MGC_ID: '1mezHKoBtkIlDt72ec81QXEORtHdCNiCG'
+          DRIVE_SECRET_CONFIGURED: ${{ secrets.MGC_GDRIVE_SA_JSON != '' }}
         run: |
-          mkdir -p data
-          python -m gdown "$MGC_ID" --output data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
-          test -s data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
-      - name: Verify canonical gzip SHA256
-        run: |
-          echo "fc7c9493a9a50301d14e665f8ae99234e591fcef70deebdf65c5f9d61e3b01d0  data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz" | sha256sum --check
+          if [ "$DRIVE_SECRET_CONFIGURED" != "true" ]; then
+            echo "::error::Missing GitHub Actions secret MGC_GDRIVE_SA_JSON. See bucko-inspired/research-v2/PRIVATE_DRIVE_SETUP.md"
+            exit 1
+          fi
+      - name: Authenticate with Google service account
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.MGC_GDRIVE_SA_JSON }}
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Download private canonical MGC and verify checksum
+        run: python bucko-inspired/research-v2/download_private_mgc.py
       - name: Run preregistered V2 simulations
-        run: |
-          python bucko-inspired/research-v2/bucko_mgc_v2.py data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz --out results
+        run: python bucko-inspired/research-v2/bucko_mgc_v2.py data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz --out results
       - name: Record source provenance
         if: success()
         run: |
