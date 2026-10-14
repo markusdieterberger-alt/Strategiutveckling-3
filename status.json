@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-14T21:56:00+02:00",
+  "updated_at": "2026-10-14T22:00:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -80,10 +80,10 @@
     {
       "id": "prime",
       "name": "AMT Micro Prime",
-      "status": "REVISE",
-      "priority": 1,
-      "stage": "Nästa datorpass – Pine compile → runtime → TV native parity",
-      "summary": "Prime02 ledger hämtad ur reproduktionspaket (150 affärer); 9 affärer sedan maj 2026, −79,50 USD/1 MNQ. Portföljproxy till CT B gav ingen robust förbättring vid 2CT+1Prime; TV parity/intraday-risk ej verifierade.",
+      "status": "HOLD / QA ÅTERSTÅR",
+      "priority": null,
+      "stage": "Pine/TV-paritet återstår; ej prioriterat datorpass",
+      "summary": "Prime02 historisk Python-ledger: 150 affärer 2019–2026 (~1,7/månad), endast 9 sedan maj 2026 (−79,50 USD/1 MNQ). Rapporterat PF omkring 1,45 vid 2p friktion men bootstrap-CI inkluderar negativ prestation. Portföljproxy med CT B visade ingen robust fundedfördel. TV/Pine-paritet och intradagsrisk återstår. Låg frekvens och svagt portföljbidrag motiverar inte automatisk prioritet 1; ingen promotion. Tekniskt kvarvarande steg är inte samma sak som projektprioritet.",
       "metrics": [
         {
           "label": "Python-affärer",
@@ -209,9 +209,9 @@
       "url": "https://drive.google.com/file/d/1XZDOfUxcKlEayLmSRXLQJ49IkE6dKCaW/view"
     },
     {
-      "title": "Prime – Pine parity",
-      "status": "NÄSTA DATORPASS",
-      "text": "Kompilera DEV, jämför första signalfält och native fills.",
+      "title": "Prime – teknisk QA återstår",
+      "status": "HOLD / EJ PRIO 1",
+      "text": "Pine DEV compile och TradingView-native parity är olösta QA-punkter, men inget prioriterat nästa datorpass. 150 trades 2019–2026 (~1,7/månad), 9 sedan maj 2026 (−79,50 USD), inget robust tillskott i CT-portföljproxy. Omprioritering efter operatörens invändning 2026-10-14.",
       "url": "https://drive.google.com/file/d/1_6qdan9KsEpcGTPo-lQIFPxtSSi16T7A/view"
     },
     {
