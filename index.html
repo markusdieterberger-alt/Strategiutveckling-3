@@ -1,88 +1,21 @@
 <!doctype html>
-<html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b1019"><title>Strategiutveckling · Command Center</title>
+<html lang="sv"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0c1220"><title>Strategiutveckling | Command Hub</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b1019;color:#e9edf6}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 85% 0,#18304a 0,transparent 35%),#0b1019}
-a{color:#9ec9ff;text-decoration:none}a:hover{text-decoration:underline}button{font:inherit;cursor:pointer}
-.shell{max-width:1220px;margin:0 auto;padding:30px 22px 70px}
-header{display:flex;gap:18px;align-items:center;justify-content:space-between;flex-wrap:wrap}
-.eyebrow{text-transform:uppercase;letter-spacing:.19em;color:#93a1bb;font-size:11px;font-weight:700}
-h1{font-size:clamp(29px,5vw,43px);margin:6px 0 5px;letter-spacing:-.04em}h2{font-size:21px;letter-spacing:-.02em;margin:0 0 16px}h3{font-size:17px;margin:0 0 10px}
-.sub{color:#a5b0c4;font-size:14px;line-height:1.6;margin:0}
-.pill{border:1px solid #33445f;border-radius:20px;padding:9px 13px;font-size:12px;color:#b9c8de}
-nav{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0}
-nav button{border:1px solid #28344a;background:#131d2d;color:#aebbd0;border-radius:12px;padding:11px 16px}
-nav button.active{background:#263b5a;color:white;border-color:#5b88c6}
-.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:23px}
-.metric,.panel,.strategy,.task{background:#121b2a;border:1px solid #263449;border-radius:17px}
-.metric{padding:20px}.metric small{display:block;color:#a1b0c4;margin-bottom:9px}.metric strong{font-size:30px;letter-spacing:-.04em}
-.layout{display:grid;grid-template-columns:2fr 1fr;gap:17px}.panel{padding:22px;margin-bottom:17px}
-.strategy-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
-.strategy{padding:18px;min-height:182px;display:flex;flex-direction:column;gap:10px}
-.strategy h3{margin:0}.line{display:flex;justify-content:space-between;align-items:start;gap:8px}
-.status{border-radius:8px;background:#2c384b;color:#d5dfed;padding:5px 8px;font-size:11px;font-weight:750;white-space:nowrap}
-.status.warn{background:#463923;color:#f3d28f}.status.wait{background:#23384a;color:#afdaff}.status.hold{background:#343244;color:#c9c5e8}
-.description{font-size:13px;color:#a2aec2;line-height:1.5;flex:1}.meta{border-top:1px solid #263449;padding-top:11px;font-size:12px;color:#c3cddd}
-.task{padding:14px 16px;margin-bottom:10px}.task b{font-size:14px}.task p{margin:6px 0 0;font-size:13px;line-height:1.5;color:#a6b3c7}
-ol{padding-left:20px;color:#cbd6e7;font-size:14px;line-height:1.8}
-.notice{background:#1b2738;border-left:3px solid #6ba2ef;padding:12px 15px;font-size:13px;line-height:1.6;color:#bdcadd;border-radius:5px;margin-top:16px}
-section[hidden]{display:none!important}
-.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:13px 10px;border-bottom:1px solid #283449;vertical-align:top}th{color:#9ba9bf;font-weight:600}td{line-height:1.5}
-.footer{margin-top:28px;color:#8393ac;font-size:12px;line-height:1.7}
-@media(max-width:850px){.layout{grid-template-columns:1fr}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:560px){.shell{padding:19px 13px 50px}.strategy-grid{grid-template-columns:1fr}.metric{padding:16px}.metric strong{font-size:25px}.panel{padding:17px}nav button{padding:9px 12px}}
-.more{border-top:1px solid #263449;padding-top:9px;font-size:12px;color:#9fb1c8}.more summary{cursor:pointer;color:#9ec9ff;font-weight:600}.more p{line-height:1.55;overflow-wrap:anywhere}.strategy{min-height:0}.strategy .description{flex:0 0 auto}.strategy h3{font-size:16px}.status{white-space:normal;text-align:right}.metric strong{overflow-wrap:anywhere}@media(max-width:560px){.metric strong{font-size:21px}.strategy{padding:15px}}
-</style><link rel="stylesheet" href="./live.css?v=2"></head>
-<body><div class="shell">
-<header><div><div class="eyebrow">Strategiutveckling / projektöversikt</div><h1>Command Center</h1><p class="sub">Strategier, forskning, validering och beslut – på ett ställe.</p></div><div class="pill">Senast dokumenterat: 14 okt 2026</div></header>
-<nav aria-label="Sektioner"><button class="active" data-tab="overview">Översikt</button><button data-tab="strategies">Strategier</button><button data-tab="work">Work & beslut</button><button data-tab="roadmap">Vägen till live</button></nav>
-<section id="overview"><div class="metrics"><div class="metric"><small>Fryst nytt experiment</small><strong>CT–FVG</strong></div><div class="metric"><small>Aktiva forskningsspår</small><strong>2</strong></div><div class="metric"><small>Live-godkända</small><strong>0</strong></div><div class="metric"><small>Beslutsstatus</small><strong style="font-size:24px">REVISE</strong></div></div>
-<div class="layout"><main><div class="panel"><h2>Aktuella strategier</h2><div class="strategy-grid" id="overview-strategies"></div></div><div class="panel"><h2>Beslutspunkter</h2><div class="task"><b>CT Scalper · A/B/C färdiga</b><p>TV/CSV: A 1 200 affärer, PF 0,994 (−163 USD); B 811, PF 1,039 (+779,50 USD); C 702, PF 1,049 (+871,50 USD). Funded-proxy och regim/VIX-forskning återstår; ingen livepromotion.</p></div><div class="task"><b>CT–FVG 01 · väntar exekvering</b><p>2026, CT C exporterade entries, oförändrad SL, TP vid närmaste orörda 30m/1h/4h-FVG. Ingen FVG = ingen trade. Python blockerad; inget backtestresultat.</p></div><div class="task"><b>HMA Midday · TV A/B avslutat</b><p>Original 115 affärer / −737,50 USD / PF 0,913. EXEC FIXED 110 / −249 USD / PF 0,964. 110 matchade entries och 5 original-only vid sessionsgräns. Status HOLD.</p></div></div></main>
-<aside><div class="panel"><h2>Föreslagen arbetsordning</h2><ol><li><b>CT–FVG 01:</b> Python-test på exporterade entries (blockerat lokalt)</li><li><b>CT footprint:</b> äldre historik kräver TradingView-audit</li><li><b>CT funded:</b> intradag/DD och forward QA</li></ol><p class="sub">Prime: HOLD; teknisk Pine/TV-paritet återstår men är inte prioritet 1.</p></div><div class="panel"><h2>Forskningsspår</h2><p class="sub"><b>AMT Bias / HVN:</b> pausat efter REVISE. Inget bekräftat robust kandidatutfall.</p><div class="notice">Alla resultat är historiska utvecklings- eller proxyresultat om inte oberoende validering uttryckligen anges.</div></div></aside></div></section>
-<section id="strategies" hidden><div class="panel"><h2>Strategikatalog</h2><div class="strategy-grid" id="all-strategies"></div></div><div class="panel"><h2>Verifierade gränser</h2><div class="tablewrap"><table><thead><tr><th>Spår</th><th>Styrkt</th><th>Ej styrkt</th></tr></thead><tbody>
-<tr><td>CT Scalper</td><td>TradingView-referens och historiska affärer</td><td>Prospektiv edge, kausal regim/VIX-gate, funded-risk och liveparitet</td></tr>
-<tr><td>AMT Prime</td><td>Python source-paritet; 150 konservativa fills</td><td>Pine-kompilering, native fills och framtida edge</td></tr>
-<tr><td>HMA Midday</td><td>TV original/EXEC FIXED och CSV verifierade; båda nettonegativa</td><td>Intrabarfill-QA, funded-proxy, framtida edge</td></tr>
-<tr><td>XAC Recovery</td><td>62,62 % äldre ledger-PASS återräknad; 29,91 % efter korrigerad Scalp-stopgap</td><td>Full ursprunglig rågenerator och realistisk funded-PASS fortfarande obekräftade</td></tr>
-</tbody></table></div></div></section>
-<section id="work" hidden><div class="panel"><h2>Uppdrag och status</h2>
-<div class="task"><div class="line"><b>CT Scalper och HMA Midday</b><span class="status wait">TV-PASS KLARA</span></div><p>CT A/B/C exporterade; HMA original och EXEC FIXED exporterade och affärsavstämda. Forskning och funded-proxy återstår; ingen promotion.</p></div><div class="task"><div class="line"><b>AMT Micro Prime 02</b><span class="status hold">HOLD</span></div><p>150 affärer 2019–2026, ungefär 1,7 per månad. Pine/TV-paritet återstår, men spåret är inte prioritet 1.</p></div>
-<div class="task"><div class="line"><b>ZAC Edge Extraction 01</b><span class="status warn">REVISE</span></div><p>Prime reproducerad. C4 och ZAB saknar originalparitet. Ingen gemensam Core Simplified skapad.</p></div>
-<div class="task"><div class="line"><b>AMT Bias 04</b><span class="status hold">PAUS</span></div><p>Inga förregistrerade kandidater passerade alla tidiga grindar.</p></div>
-<div class="task"><div class="line"><b>XAC Recovery 01</b><span class="status hold">ARKIVERAD</span></div><p>Work slutfört XAC Recovery 01; operatören har beslutat arkivering. Ingen funded-kandidat räddad.</p></div>
-<div class="notice">Work har ingen direkt progressintegration här. Statusarna är senast dokumenterade, inte en realtidsmätare.</div></div></section>
-<section id="roadmap" hidden><div class="panel"><h2>Valideringskedjan</h2>
-<ol><li><b>Källidentitet:</b> ursprunglig kod, version och data spårbara</li><li><b>Canonical Python:</b> kausala signaler och realistiska fills</li><li><b>Pine / TradingView-paritet:</b> första signal- och orderavvikelse löst</li><li><b>Robusthet:</b> perioder, kostnader, riktningar och osäkerhet</li><li><b>Prospektiv forward-test:</b> frysta regler på ny data</li><li><b>Funded-risk:</b> verkliga kontoregler, intratrade DD och marginal</li><li><b>Projektledarbeslut:</b> live först efter samtliga grindar</li></ol><div class="notice">Ingen strategi har idag dokumenterat klarat hela kedjan.</div></div></section>
-<footer class="footer">Offentlig projektvy – innehåller inga privata kontouppgifter eller Drive-dokument. Källkod: <a href="https://github.com/markusdieterberger-alt/Strategiutveckling-3">Strategiutveckling-3</a>.<br>Strategistatus hämtas från publicerad status.json när tillgänglig; övriga texter uppdateras genom versionskontrollerad publicering.</footer>
-</div><script>
-const fallbackStrategies=[
-{name:"CT Scalper",status:"QA / REGIMFORSKNING",kind:"wait",detail:"TV A/B/C och CSV klara: A 1 200/PF 0,994; B 811/PF 1,039; C 702/PF 1,049. Funded-proxy och regim/VIX-validering återstår. Ingen promotion.",meta:"Datorpass klart · 1m MNQ"},
-{name:"HMA Midday",status:"HOLD",kind:"hold",detail:"Original 115 trades/−737,50 USD/PF 0,913; EXEC FIXED 110/−249 USD/PF 0,964. Affärsloggar kontrollerade; ingen promotion.",meta:"Datorpass klart · 15m MNQ"},
-{name:"AMT Micro Prime",status:"HOLD",kind:"hold",detail:"150 affärer 2019–2026 (~1,7 per månad). Pine/TV-paritet återstår, ej prioritet 1.",meta:"HOLD · Pine/TV-paritet kvarstår"},
-{name:"XAC Recovery",status:"ARKIVERAD",kind:"hold",detail:"Operatörsbeslut 2026-10-13. Historisk 62,62 % PASS faller till 29,91 % efter stopgapkorrigering; ingen funded-edge verifierad.",meta:"Stängt spår"}
-];
-function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function brief(t){
- const map={
- ct:'A/B/C jämförda i TradingView. CT–FVG 01 är fryst för 2026 och väntar på backtest; äldre footprint-täckning ej verifierad.',
- hma:'Original och EXEC FIXED är nettonegativa. Intrabar-QA återstår; ingen promotion.',
- prime:'150 affärer 2019–2026 (~1,7/månad). Ingen robust nytta i CT-portföljproxy. Ej prioritet 1.',
- xac:'Arkiverad efter korrigerade exekveringsfynd. Ingen verifierad funded-edge.',
- c4:'Arkiverad efter korrigerade order- och fillfel. Ingen vidare optimering.'
- };
- return map[t.id]||t.summary||'Status kräver granskning';
-}
-function renderStrategies(items){
- const short=items.map(s=>'<article class="strategy"><div class="line"><h3>'+esc(s.name)+'</h3><span class="status '+esc(s.kind)+'">'+esc(s.status)+'</span></div><div class="description">'+esc(s.short||s.detail)+'</div><div class="meta">'+esc(s.meta)+'</div><details class="more"><summary>Visa dokumenterad bakgrund</summary><p>'+esc(s.detail)+'</p></details></article>').join('');
- document.getElementById('overview-strategies').innerHTML=short;
- document.getElementById('all-strategies').innerHTML=short;
-}
-renderStrategies(fallbackStrategies);
-fetch('./status.json?ts='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('Status HTTP '+r.status);return r.json()}).then(data=>{
- if(!Array.isArray(data.strategies))return;
- const mapped=data.strategies.map(t=>({name:t.name,status:t.status,kind:t.status==='HOLD'||t.status==='ARKIVERAD'?'hold':t.id==='prime'?'warn':'wait',detail:t.summary,short:brief(t),meta:t.stage}));
- renderStrategies(mapped);
-}).catch(e=>console.warn('Statusfilen kunde inte hämtas – senaste inbyggda status visas.',e));
-document.querySelectorAll('nav button').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('nav button').forEach(x=>x.classList.toggle('active',x===b));document.querySelectorAll('section').forEach(s=>s.hidden=s.id!==b.dataset.tab)}));
-</script><script src="./live.js?v=2" defer></script></body></html>
+:root{font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;color:#eef3fb;background:#0c1220}*{box-sizing:border-box}body{margin:0;background:#0c1220}a{color:#a9c9fb;text-decoration:none}a:hover{text-decoration:underline}.wrap{max-width:1140px;margin:auto;padding:22px 16px 72px}.eyebrow{letter-spacing:.13em;font-size:11px;text-transform:uppercase;color:#8ea5bf;font-weight:700}header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}h1{font-size:clamp(26px,5vw,38px);letter-spacing:-.04em;margin:5px 0 4px}h2{font-size:19px;margin:0 0 14px}h3{font-size:16px;margin:0 0 8px}.muted{color:#a3b2c8;line-height:1.5}.small{font-size:12px}.stamp{font-size:12px;color:#9fb2c9;border:1px solid #334357;padding:8px 10px;border-radius:9px;white-space:nowrap}.lead{margin-top:22px;padding:22px;border:1px solid #3a5270;border-radius:16px;background:linear-gradient(115deg,#1a2f4b,#111e30)}.lead .num{font-size:12px;color:#9ed0ff;font-weight:800;letter-spacing:.09em}.lead h2{font-size:clamp(21px,4vw,28px);margin:8px 0}.lead p{line-height:1.55;margin:6px 0 14px;color:#c0cce0}.status{display:inline-block;padding:5px 9px;border:1px solid #465471;border-radius:8px;color:#cad8ec;font-size:11px;font-weight:750}.action{display:inline-block;background:#2c5f9c;color:#fff;padding:10px 14px;border-radius:10px;font-weight:700;font-size:13px}.layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:16px;margin-top:16px}.card{background:#151e2e;border:1px solid #2a384d;border-radius:15px;padding:19px;min-width:0}.priority{display:flex;gap:12px;padding:13px 0;border-top:1px solid #29384c}.priority:first-of-type{border:0;padding-top:0}.rank{flex:0 0 28px;height:28px;border-radius:9px;background:#263d5a;display:grid;place-items:center;color:#a9d5ff;font-weight:800}.priority p{margin:5px 0;color:#adbbce;font-size:13px;line-height:1.5}.priority b{font-size:14px}.priority a{font-size:12px}.kpi{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin:16px 0}.kpi div{border:1px solid #2a384d;border-radius:12px;padding:15px;background:#141d2b}.kpi strong{font-size:22px;display:block}.kpi small{font-size:11px;color:#9aaec5}.item{padding:12px 0;border-top:1px solid #29384c}.item:first-of-type{border:0;padding-top:0}.item b{font-size:13px}.item p{color:#aab8cc;font-size:12px;line-height:1.5;margin:5px 0}.item time{color:#91a5bd;font-size:11px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.strategy{padding:15px;border:1px solid #2b394d;border-radius:12px;background:#111a29}.strategy h3{font-size:15px;margin:0 0 7px}.strategy p{font-size:12px;color:#aebbd0;line-height:1.5;margin:9px 0}.strategy details{border-top:1px solid #2b394d;padding-top:9px}.strategy summary{color:#a9c9fb;font-size:12px;cursor:pointer}.strategy .status{font-size:10px}.foot{font-size:12px;color:#8499b3;line-height:1.7;margin-top:22px}.section{margin-top:16px}#err{display:none;color:#ffcfb8;font-size:13px}@media(max-width:800px){.layout{grid-template-columns:1fr}}@media(max-width:550px){.wrap{padding:16px 12px 54px}.lead{padding:17px}header{flex-direction:column;gap:8px}.kpi{gap:6px}.kpi div{padding:11px}.kpi strong{font-size:18px}.grid{grid-template-columns:1fr}.card{padding:16px}}
+</style></head><body><main class="wrap"><header><div><div class="eyebrow">Strategiutveckling · Projektledare</div><h1>Command Hub</h1><div class="muted small">Vad är viktigast? Vad vet vi? Vad blockerar nästa steg?</div></div><div class="stamp" id="updated">Hämtar status…</div></header>
+<section class="lead"><div class="num">PRIORITET 1 · KRITISK DATA-QA</div><h2 id="topTitle">CT Scalper – historisk footprint</h2><span class="status" id="topState">VÄNTAR TRADINGVIEW</span><p id="topWhy">Kontrollera om äldre signaler bygger på jämförbar footprint-data.</p><p><b>Nästa steg:</b> <span id="topNext">Mät faktisk historisk tillgänglighet i TradingView.</span></p><a class="action" id="topLink" href="#work">Visa underlag ↗</a></section>
+<div class="kpi"><div><strong>0</strong><small>Livegodkända</small></div><div><strong>1</strong><small>Högsta prioritet</small></div><div><strong>2</strong><small>Aktiva CT-uppdrag</small></div></div>
+<div class="layout"><section class="card" id="work"><h2>Arbetsordning</h2><div id="priorities"></div></section><section class="card"><h2>Blockeringar</h2><div id="blockers"></div></section></div>
+<div class="layout"><section class="card"><h2>Viktiga beslut och fynd</h2><div id="decisions"></div></section><section class="card"><h2>Vägen mot live</h2><div class="item"><b>1. Datakvalitet</b><p>Bekräfta footprint-historik, signalursprung och kontraktsdata.</p></div><div class="item"><b>2. Kausal backtest</b><p>Frysta regler, realistiska fills, ingen lookahead.</p></div><div class="item"><b>3. Robusthet och paritet</b><p>TV ↔ Python, kostnader, gap, roll och OOS.</p></div><div class="item"><b>4. Forward och funded</b><p>Intradags-DD, kontoregler och framåttest innan beslut om live.</p></div></section></div>
+<section class="card section"><h2>Strategier – kort status</h2><div class="grid" id="strategies"></div></section>
+<div class="foot"><p>Resultat är historiska utvecklings- eller proxyresultat. Ingen strategi är godkänd för livehandel.</p><p><b>Uppdateringsprincip:</b> Verifierade viktiga beslut från projektchatten ska skrivas till statusunderlaget och därefter synas här. Chatten synkroniseras inte automatiskt utan en faktisk publicering på GitHub.</p><p><a href="https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit">A003 – projektöverlämning</a> · <a href="https://github.com/markusdieterberger-alt/Strategiutveckling-3">GitHub-repo</a></p></div><div id="err"></div></main>
+<script>
+const brief={ct:"Tre TV-versioner jämförda. Historisk footprint-integritet är prioritet 1; FVG-test väntar.",hma:"Nettonegativ historik. HOLD tills ytterligare QA motiveras.",prime:"150 affärer 2019–2026, låg frekvens och ingen robust CT-portföljfördel. Inte prioritet 1.",xac:"Arkiverad efter stopgap-korrigering. Ingen verifierad funded-edge.",c4:"Arkiverad efter exekveringsforensik."};
+const esc=x=>String(x??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function render(d){const b=d.dashboard||{};document.getElementById("updated").textContent="Dokumenterat "+(b.updated||"okänt datum");const top=(b.priority||[])[0];if(top){document.getElementById("topTitle").textContent=top.title;document.getElementById("topState").textContent=top.state;document.getElementById("topWhy").textContent=top.why;document.getElementById("topNext").textContent=top.next;document.getElementById("topLink").href=top.link;}
+document.getElementById("priorities").innerHTML=(b.priority||[]).map(x=>'<div class="priority"><div class="rank">'+esc(x.rank)+'</div><div><b>'+esc(x.title)+'</b><div class="status">'+esc(x.state)+'</div><p>'+esc(x.next)+'</p><a href="'+esc(x.link)+'">Underlag ↗</a></div></div>').join("");
+document.getElementById("blockers").innerHTML=(b.blockers||[]).map(x=>'<div class="item"><b>'+esc(x.name)+'</b><p>'+esc(x.detail)+'</p><span class="muted small">'+esc(x.owner)+'</span></div>').join("");
+document.getElementById("decisions").innerHTML=(b.decisions||[]).map(x=>'<div class="item"><time>'+esc(x.date)+' · '+esc(x.type)+'</time><p><b>'+esc(x.title)+'</b></p><p>'+esc(x.detail)+'</p></div>').join("");
+document.getElementById("strategies").innerHTML=(d.strategies||[]).map(x=>'<div class="strategy"><h3>'+esc(x.name)+'</h3><span class="status">'+esc(x.status)+'</span><p>'+esc(brief[x.id]||x.stage)+'</p><details><summary>Mer information</summary><p>'+esc(x.summary)+'</p></details></div>').join("");}
+fetch("./status.json?v="+Date.now(),{cache:"no-store"}).then(r=>{if(!r.ok)throw Error("HTTP "+r.status);return r.json()}).then(render).catch(e=>{document.getElementById("err").style.display="block";document.getElementById("err").textContent="Kunde inte hämta projektstatus: "+e.message;});
+</script></body></html>
