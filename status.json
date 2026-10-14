@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-14T22:00:00+02:00",
+  "updated_at": "2026-10-14T22:05:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -290,5 +290,73 @@
       "description": "2026, CT Scalper C huvudtest (702 trades/PF 1,049 historisk bas), B sekundär. Befintliga exporterade TradingView-entries, ordinarie SL. TP 1 tick före närmaste helt orörda och före entry bekräftade 30m/1h/4h-FVG i trade-riktning; saknas giltig FVG tas ingen trade. Konservativ MNQ-exekvering. CSV-etiketter verifieras mot affärsinnehåll. Ny positionssimulering krävs och exportlistan är potentiellt ofullständig som alternativt signalflöde. Lokal Python/terminal caas.internal.errors.ClientError, senast 14 okt 21:56 CEST; inga backtestresultat. Work kan prövas, ingen exekvering verifierad.",
       "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
     }
-  ]
+  ],
+  "dashboard": {
+    "updated": "2026-10-14",
+    "priority": [
+      {
+        "rank": 1,
+        "title": "CT Scalper – historisk footprint",
+        "state": "VÄNTAR TRADINGVIEW",
+        "why": "Avgör om äldre 2024–2026-signaler bygger på jämförbar footprint-data. Första undersökta bar 2026-09-20 är bara gränsen för laddad historik.",
+        "next": "Mät faktisk tillgänglighet och upplösning längre bak i TradingView; kontrollera fallback och per-modell-effekt.",
+        "link": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+      },
+      {
+        "rank": 2,
+        "title": "CT–FVG 01 – TP-experiment",
+        "state": "FRYST / EJ KÖRD",
+        "why": "Testa om närmaste helt orörda 30m/1h/4h-FVG förbättrar CT C:s exits under 2026 med original-SL.",
+        "next": "Kör på exporterade TradingView-entries; Pythonmiljön var blockerad, Work är ett möjligt alternativ.",
+        "link": "https://drive.google.com/drive/folders/1-ifS7TzOthh4sytaNTx-LGG2bTa6fXGF"
+      },
+      {
+        "rank": 3,
+        "title": "CT funded & framåttest",
+        "state": "EFTER QA",
+        "why": "Edge och intradagsrisk måste verifieras före funded/live.",
+        "next": "Kör konservativ funded-simulering och prospektivt test först när dataintegritet och exits är fastställda.",
+        "link": "https://docs.google.com/document/d/1bFtA1STNWwOYtuL8dx0bgGgNXGG2ZOlsxxjstI5K6Zk/edit"
+      }
+    ],
+    "decisions": [
+      {
+        "date": "2026-10-14",
+        "type": "Prioritering",
+        "title": "CT historisk footprint är prioritet 1",
+        "detail": "FVG-experimentet ligger därefter. Prime är inte nästa prioriterade datorpass."
+      },
+      {
+        "date": "2026-10-14",
+        "type": "Observation",
+        "title": "24 700 av 24 700 laddade bars med footprint",
+        "detail": "Noll saknade i laddad period från 2026-09-20; äldre historik och datakvalitet är ej styrkta."
+      },
+      {
+        "date": "2026-10-14",
+        "type": "Experiment",
+        "title": "CT–FVG 01 fryst",
+        "detail": "CT C exporterade entries, ordinarie SL, närmaste helt orörda FVG på 30m/1h/4h; utan FVG ingen trade. Ej körd."
+      },
+      {
+        "date": "2026-10-14",
+        "type": "Beslut",
+        "title": "Prime flyttad till HOLD",
+        "detail": "150 affärer 2019–2026, ingen robust funded-fördel mot CT-portföljen; Pine/TV QA kvar."
+      }
+    ],
+    "blockers": [
+      {
+        "name": "CT footprint historik",
+        "detail": "Kräver mätning i TradingView utanför den begränsade laddade perioden.",
+        "owner": "TradingView-datorpass"
+      },
+      {
+        "name": "CT–FVG backtest",
+        "detail": "Lokal terminal/Python ClientError senast 14 oktober kl. 21:56.",
+        "owner": "Python / Work"
+      }
+    ],
+    "principle": "Beslut och experiment uppdateras i status.json när de verifieras. Ingen automatisk synk från chatten; publicering kräver en faktisk GitHub-uppdatering."
+  }
 }
