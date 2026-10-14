@@ -1,0 +1,66 @@
+//@version=6
+indicator("BUCKO INSPIRED V1 | MGC 5m | Research", overlay=true, max_labels_count=500, max_lines_count=500)
+// Original independent research design; NOT Bucko source code.
+// Frozen defaults, signals confirmed on candle close. No security() / future bars.
+fastLen=input.int(9,"EMA fast",minval=1,group="Trend")
+midLen=input.int(21,"EMA mid",minval=1,group="Trend")
+slowLen=input.int(50,"EMA slow",minval=1,group="Trend")
+biasLen=input.int(200,"EMA major",minval=1,group="Trend")
+rsiLen=input.int(14,"RSI period",minval=2,group="Momentum")
+adxLen=input.int(14,"DI/ADX period",minval=2,group="Momentum")
+adxMin=input.float(18.0,"Minimum ADX",minval=0,step=0.5,group="Momentum")
+rsiLongMin=input.float(52.0,"RSI long threshold",minval=0,maxval=100,group="Momentum")
+rsiShortMax=input.float(48.0,"RSI short threshold",minval=0,maxval=100,group="Momentum")
+volLen=input.int(20,"Relative volume lookback",minval=2,group="Volume")
+rvolMin=input.float(1.1,"Min relative volume",minval=0,step=0.1,group="Volume")
+swingLen=input.int(5,"Breakout lookback (closed bars)",minval=2,group="Structure")
+minGrade=input.string("A","Minimum signal grade",options=["A+","A","B"],group="Signals")
+atrLen=input.int(14,"ATR",minval=1,group="Risk")
+stopAtr=input.float(1.5,"SL = ATR multiple",minval=0.25,step=0.25,group="Risk")
+rr=input.float(2.0,"TP = R multiple",minval=0.5,step=0.5,group="Risk")
+drawLevels=input.bool(true,"Draw SL/TP on signal",group="Visuals")
+lineBars=input.int(15,"SL/TP projection bars",minval=1,maxval=200,group="Visuals")
+ema9=ta.ema(close,fastLen)
+ema21=ta.ema(close,midLen)
+ema50=ta.ema(close,slowLen)
+ema200=ta.ema(close,biasLen)
+rsi=ta.rsi(close,rsiLen)
+[diPlus,diMinus,adx]=ta.dmi(adxLen,adxLen)
+atr=ta.atr(atrLen)
+avgVolume=ta.sma(volume,volLen)
+rvol=avgVolume>0?volume/avgVolume:na
+trendUp=ema9>ema21 and ema21>ema50 and close>ema200
+trendDown=ema9<ema21 and ema21<ema50 and close<ema200
+momentumUp=rsi>=rsiLongMin and adx>=adxMin and diPlus>diMinus
+momentumDown=rsi<=rsiShortMax and adx>=adxMin and diMinus>diPlus
+volOK=not na(rvol) and rvol>=rvolMin
+breakLong=close>ta.highest(high,swingLen)[1] and close[1]<=ta.highest(high,swingLen)[2]
+breakShort=close<ta.lowest(low,swingLen)[1] and close[1]>=ta.lowest(low,swingLen)[2]
+scoreLong=(trendUp?1:0)+(momentumUp?1:0)+(volOK?1:0)
+scoreShort=(trendDown?1:0)+(momentumDown?1:0)+(volOK?1:0)
+minimumScore=minGrade=="A+"?3:minGrade=="A"?2:1
+ready=barstate.isconfirmed and not na(ema200) and not na(atr) and not na(rvol) and atr>0
+// Strict directional trend is mandatory even for B grades.
+longSignal=ready and trendUp and breakLong and scoreLong>=minimumScore
+shortSignal=ready and trendDown and breakShort and scoreShort>=minimumScore
+gradeFor(int score)=>score==3?"A+":score==2?"A":"B"
+plot(ema9,"EMA 9",color=color.aqua)
+plot(ema21,"EMA 21",color=color.yellow)
+plot(ema50,"EMA 50",color=color.orange)
+plot(ema200,"EMA 200",color=color.gray,linewidth=2)
+fill(plot(ema9,display=display.none),plot(ema21,display=display.none),color=ema9>ema21?color.new(color.green,87):color.new(color.red,87))
+bgcolor(trendUp?color.new(color.green,94):trendDown?color.new(color.red,94):na)
+if longSignal or shortSignal
+    bool isLong=longSignal
+    float entry=close
+    float stop=isLong?entry-atr*stopAtr:entry+atr*stopAtr
+    float target=isLong?entry+atr*stopAtr*rr:entry-atr*stopAtr*rr
+    color c=isLong?color.lime:color.red
+    string side=isLong?"LONG ":"SHORT "
+    label.new(bar_index,isLong?low:high,side+gradeFor(isLong?scoreLong:scoreShort),color=c,textcolor=color.black,style=isLong?label.style_label_up:label.style_label_down,size=size.tiny)
+    if drawLevels
+        line.new(bar_index,entry,bar_index+lineBars,entry,color=color.gray,style=line.style_dotted)
+        line.new(bar_index,stop,bar_index+lineBars,stop,color=color.red)
+        line.new(bar_index,target,bar_index+lineBars,target,color=color.lime)
+alertcondition(longSignal,"BUCKO INSPIRED LONG","BUCKO INSPIRED V1 LONG (bar close confirmed). Research only.")
+alertcondition(shortSignal,"BUCKO INSPIRED SHORT","BUCKO INSPIRED V1 SHORT (bar close confirmed). Research only.")
