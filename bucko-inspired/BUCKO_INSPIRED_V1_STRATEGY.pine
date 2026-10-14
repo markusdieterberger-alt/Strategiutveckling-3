@@ -1,0 +1,99 @@
+//@version=6
+strategy("BUCKO INSPIRED V1 | MGC 5m | Research Backtest",overlay=true,initial_capital=25000,default_qty_type=strategy.fixed,default_qty_value=1,pyramiding=0,commission_type=strategy.commission.cash_per_contract,commission_value=1.0,slippage=1,calc_on_every_tick=false,process_orders_on_close=false)
+// Independent, non-Bucko code. One contract by default; commission_value is per order side, total $2 RT.
+// For MGC: verify contract point value/tick and broker fees. TradingView fills are simulator assumptions.
+fastLen=input.int(9,"EMA fast",minval=1,group="Trend")
+midLen=input.int(21,"EMA mid",minval=1,group="Trend")
+slowLen=input.int(50,"EMA slow",minval=1,group="Trend")
+biasLen=input.int(200,"EMA major",minval=1,group="Trend")
+rsiLen=input.int(14,"RSI period",minval=2,group="Momentum")
+adxLen=input.int(14,"DI/ADX period",minval=2,group="Momentum")
+adxMin=input.float(18.0,"Minimum ADX",minval=0,step=0.5,group="Momentum")
+rsiLongMin=input.float(52.0,"RSI long threshold",minval=0,maxval=100,group="Momentum")
+rsiShortMax=input.float(48.0,"RSI short threshold",minval=0,maxval=100,group="Momentum")
+volLen=input.int(20,"Relative volume lookback",minval=2,group="Volume")
+rvolMin=input.float(1.1,"Min relative volume",minval=0,step=0.1,group="Volume")
+swingLen=input.int(5,"Breakout lookback (closed bars)",minval=2,group="Structure")
+minGrade=input.string("A","Minimum signal grade",options=["A+","A","B"],group="Signals")
+atrLen=input.int(14,"ATR",minval=1,group="Risk")
+stopAtr=input.float(1.5,"SL ATR multiple",minval=0.25,step=0.25,group="Risk")
+rr=input.float(2.0,"RR (test 1,2,3)",options=[1.0,2.0,3.0],group="Risk")
+exitMode=input.string("Fixed","Exit policy",options=["Fixed","BE +1R","Trail +2R / 1R"],group="Risk")
+startTime=input.time(timestamp("01 Jan 2020 00:00 +0000"),"Backtest start UTC",group="Period")
+endTime=input.time(timestamp("01 Jan 2099 00:00 +0000"),"Backtest end UTC",group="Period")
+ema9=ta.ema(close,fastLen)
+ema21=ta.ema(close,midLen)
+ema50=ta.ema(close,slowLen)
+ema200=ta.ema(close,biasLen)
+rsi=ta.rsi(close,rsiLen)
+[diPlus,diMinus,adx]=ta.dmi(adxLen,adxLen)
+atr=ta.atr(atrLen)
+avgVolume=ta.sma(volume,volLen)
+rvol=avgVolume>0?volume/avgVolume:na
+trendUp=ema9>ema21 and ema21>ema50 and close>ema200
+trendDown=ema9<ema21 and ema21<ema50 and close<ema200
+momentumUp=rsi>=rsiLongMin and adx>=adxMin and diPlus>diMinus
+momentumDown=rsi<=rsiShortMax and adx>=adxMin and diMinus>diPlus
+volOK=not na(rvol) and rvol>=rvolMin
+breakLong=close>ta.highest(high,swingLen)[1] and close[1]<=ta.highest(high,swingLen)[2]
+breakShort=close<ta.lowest(low,swingLen)[1] and close[1]>=ta.lowest(low,swingLen)[2]
+scoreLong=(trendUp?1:0)+(momentumUp?1:0)+(volOK?1:0)
+scoreShort=(trendDown?1:0)+(momentumDown?1:0)+(volOK?1:0)
+minimumScore=minGrade=="A+"?3:minGrade=="A"?2:1
+ready=barstate.isconfirmed and not na(ema200) and not na(atr) and not na(rvol) and atr>0 and time>=startTime and time<=endTime
+longSignal=ready and trendUp and breakLong and scoreLong>=minimumScore
+shortSignal=ready and trendDown and breakShort and scoreShort>=minimumScore
+// Pending next-bar market entry. Brackets are anchored to the actual avg fill, not signal close.
+var float frozenRisk=na
+var float activeStop=na
+var float activeTarget=na
+var float peakClose=na
+var float troughClose=na
+var bool armed=false
+if strategy.position_size==0 and strategy.opentrades==0 and ready
+    if longSignal
+        frozenRisk:=math.max(atr*stopAtr,syminfo.mintick)
+        strategy.entry("L",strategy.long,comment="L "+(scoreLong==3?"A+":scoreLong==2?"A":"B"))
+    else if shortSignal
+        frozenRisk:=math.max(atr*stopAtr,syminfo.mintick)
+        strategy.entry("S",strategy.short,comment="S "+(scoreShort==3?"A+":scoreShort==2?"A":"B"))
+entered=strategy.position_size!=0 and strategy.position_size[1]==0
+if entered
+    float avg=strategy.position_avg_price
+    bool isLong=strategy.position_size>0
+    activeStop:=isLong?avg-frozenRisk:avg+frozenRisk
+    activeTarget:=isLong?avg+frozenRisk*rr:avg-frozenRisk*rr
+    peakClose:=close
+    troughClose:=close
+    armed:=false
+if strategy.position_size>0
+    peakClose:=math.max(nz(peakClose,close),close)
+    if exitMode=="BE +1R" and close>=strategy.position_avg_price+frozenRisk
+        activeStop:=math.max(activeStop,strategy.position_avg_price)
+    if exitMode=="Trail +2R / 1R"
+        armed:=armed or close>=strategy.position_avg_price+2*frozenRisk
+        if armed
+            activeStop:=math.max(activeStop,peakClose-frozenRisk)
+    strategy.exit("XL",from_entry="L",stop=activeStop,limit=activeTarget)
+if strategy.position_size<0
+    troughClose:=math.min(nz(troughClose,close),close)
+    if exitMode=="BE +1R" and close<=strategy.position_avg_price-frozenRisk
+        activeStop:=math.min(activeStop,strategy.position_avg_price)
+    if exitMode=="Trail +2R / 1R"
+        armed:=armed or close<=strategy.position_avg_price-2*frozenRisk
+        if armed
+            activeStop:=math.min(activeStop,troughClose+frozenRisk)
+    strategy.exit("XS",from_entry="S",stop=activeStop,limit=activeTarget)
+if strategy.position_size==0 and strategy.position_size[1]!=0
+    activeStop:=na
+    activeTarget:=na
+    peakClose:=na
+    troughClose:=na
+    armed:=false
+plot(ema9,"EMA 9",color=color.aqua)
+plot(ema21,"EMA 21",color=color.yellow)
+plot(ema50,"EMA 50",color=color.orange)
+plot(ema200,"EMA 200",color=color.gray,linewidth=2)
+plot(strategy.position_size!=0?activeStop:na,"Active stop",color=color.red,style=plot.style_linebr)
+plot(strategy.position_size!=0?activeTarget:na,"Active target",color=color.lime,style=plot.style_linebr)
+bgcolor(trendUp?color.new(color.green,94):trendDown?color.new(color.red,94):na)
