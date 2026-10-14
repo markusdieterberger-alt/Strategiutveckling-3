@@ -24,7 +24,7 @@ jobs:
           MGC_ID: '1mezHKoBtkIlDt72ec81QXEORtHdCNiCG'
         run: |
           mkdir -p data
-          python -m gdown --id "$MGC_ID" --output data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
+          python -m gdown "$MGC_ID" --output data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
           test -s data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
       - name: Verify canonical gzip SHA256
         run: |
