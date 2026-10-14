@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "updated_at": "2026-10-14T07:25:00+02:00",
+  "updated_at": "2026-10-14T07:45:00+02:00",
   "disclaimer": "Historiska/utvecklingsresultat; ingen strategi är livegodkänd. Work-uppdrag kan inte följas i realtid från GitHub.",
   "strategies": [
     {
@@ -9,7 +9,7 @@
       "status": "QA / REGIMFORSKNING",
       "priority": null,
       "stage": "A/B/C körda; funded-proxy och regimstudie väntar",
-      "summary": "TradingView A/B/C och samtliga trade-CSV kontrollerade. Förbättring sedan maj 2026 är explorativ; Nasdaq-range och låg VIX är ännu ej verifierade orsakssamband. Ingen funded-passrate eller livepromotion.",
+      "summary": "A/B/C TradingView CSV och exekveringsforskning klara; CT B + Prime02 funded EOD-ledger-proxy sedan maj körd. 2 CT MNQ: 35 PASS/5 FAIL/58 OPEN (98 starter); tillägg 1 Prime: 34 PASS/10 FAIL/54 OPEN. Ingen robust integrationsfördel, ingen promotion.",
       "metrics": [
         {
           "label": "A: 1 200 affärer",
@@ -79,7 +79,7 @@
       "status": "REVISE",
       "priority": 1,
       "stage": "Nästa datorpass – Pine compile → runtime → TV native parity",
-      "summary": "Python-/source-rapport finns; Pine DEV är levererad men TradingView-kompilering, runtime och orderparitet är ej verifierade. Ingen funded/livepromotion.",
+      "summary": "Prime02 ledger hämtad ur reproduktionspaket (150 affärer); 9 affärer sedan maj 2026, −79,50 USD/1 MNQ. Portföljproxy till CT B gav ingen robust förbättring vid 2CT+1Prime; TV parity/intraday-risk ej verifierade.",
       "metrics": [
         {
           "label": "Python-affärer",
@@ -238,6 +238,12 @@
     }
   ],
   "research": [
+    {
+      "name": "CT B + Prime02 – funded-portföljproxy",
+      "status": "KÖRD / EJ PROMOTION",
+      "description": "Maj–2 okt 2026, 98 starkt överlappande 15-dagars EOD-ledger-fönster. 2CT: PASS35 FAIL5 OPEN58; 2CT+1Prime: PASS34 FAIL10 OPEN54. Prime 9 trades −79,50 USD; äldre kontroll ingen robust funded-edge. Inte intradag-/provider-exakt.",
+      "url": "https://docs.google.com/document/d/1CfUzcWIWUkP1hKEqb39pYQy5dWnRz4pBmTDKqcL-ZrA/edit"
+    },
     {
       "name": "CT Scalper – marknadsregim och VIX",
       "status": "HYPOTES / EJ VALIDERAD",
