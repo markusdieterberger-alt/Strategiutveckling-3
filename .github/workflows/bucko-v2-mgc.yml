@@ -1,0 +1,47 @@
+name: Bucko V2 MGC Python research
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout frozen source
+        uses: actions/checkout@v4
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: python -m pip install --disable-pip-version-check numpy pandas gdown
+      - name: Download canonical MGC 1m from Drive
+        env:
+          MGC_ID: '1mezHKoBtkIlDt72ec81QXEORtHdCNiCG'
+        run: |
+          mkdir -p data
+          python -m gdown --id "$MGC_ID" --output data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
+          test -s data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz
+      - name: Verify canonical gzip SHA256
+        run: |
+          echo "fc7c9493a9a50301d14e665f8ae99234e591fcef70deebdf65c5f9d61e3b01d0  data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz" | sha256sum --check
+      - name: Run preregistered V2 simulations
+        run: |
+          python bucko-inspired/research-v2/bucko_mgc_v2.py data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz --out results
+      - name: Record source provenance
+        if: success()
+        run: |
+          git rev-parse HEAD > results/code_commit.txt
+          sha256sum data/MGC_CANONICAL_1M_V1_0_2026-10-05.csv.gz > results/data_sha256.txt
+      - name: Upload result ledgers
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bucko-v2-mgc-results
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
