@@ -1,0 +1,168 @@
+//@version=6
+indicator("BR3 Native Footprint Pilot | 03.1 | research", overlay=false, max_labels_count=30)
+// Separate Premium/Ultimate companion. NOT exchange aggressor truth or a strategy.
+// Connect source to the OHLCV indicator's BR3_BUS plot, then confirm the connection.
+// REPLICA ASSUMPTION: all classification / thresholds below. No claimed Bucko factor identity.
+float sourceBus = input.source(close, "Select Bucko Replica V3: BR3_BUS")
+bool confirmSource = input.bool(false, "I selected BR3_BUS from the unchanged core")
+string mode = input.string("Quality only", "Footprint role", options=["Quality only","Gate"])
+int ticksRow = input.int(4, "Ticks per row (4 MNQ ticks = 1 point)", minval=1, maxval=200)
+float vaPercent = input.float(70, "Value area percent", minval=1, maxval=100)
+float imbalancePercent = input.float(300, "Diagonal imbalance percent", minval=100, maxval=2000)
+float minDeltaShare = input.float(0.10, "Directional delta/total threshold", minval=0.0, maxval=1.0, step=0.05)
+bool needImbalance = input.bool(false, "Require at least one directional imbalance row")
+bool rejectOneSided = input.bool(false, "Gate: reject one-sided bars (diagnostic policy, NOT resolution proof)")
+int rowCap = input.int(300, "Maximum rows inspected per bar", minval=10, maxval=500)
+bool logs = input.bool(false, "Write JSON for every closed bar to Pine Logs")
+bool rowLogs = input.bool(false, "Log individual price rows on raw candidates (bounded)")
+bool alerts = input.bool(false, "Enable closed-bar research JSON alerts")
+
+f_json(float x) =>
+    na(x) ? "null" : str.tostring(x)
+
+bool busValid = confirmSource and not na(sourceBus) and sourceBus == math.floor(sourceBus) and sourceBus >= 100000 and sourceBus <= 104095
+int payload = busValid ? int(sourceBus)-100000 : 0
+int rawMask = payload % 4
+int coreMask = int(math.floor(payload/4)) % 4
+int scoreL = int(math.floor(payload/16)) % 16
+int scoreS = int(math.floor(payload/256)) % 16
+busValid := busValid and scoreL <= 10 and scoreS <= 10 and (coreMask == 0 or (coreMask == 1 and rawMask % 2 == 1) or (coreMask == 2 and rawMask >= 2))
+bool rawL = busValid and rawMask % 2 == 1
+bool rawS = busValid and rawMask >= 2
+bool coreL = busValid and coreMask == 1
+bool coreS = busValid and coreMask == 2
+
+// Exactly ONE footprint request. No security() copies of this request.
+footprint fp = request.footprint(ticksRow, vaPercent, imbalancePercent)
+bool present = not na(fp)
+float buys = na
+float sells = na
+float total = na
+float delta = na
+float pocLo = na
+float pocHi = na
+float vah = na
+float val = na
+int rowCount = na
+int buyImbalances = na
+int sellImbalances = na
+float topBuy = na
+float bottomSell = na
+if present
+    buys := fp.buy_volume()
+    sells := fp.sell_volume()
+    total := fp.total_volume()
+    delta := fp.delta()
+    volume_row pocRow = fp.poc()
+    volume_row vahRow = fp.vah()
+    volume_row valRow = fp.val()
+    if not na(pocRow)
+        pocLo := pocRow.down_price()
+        pocHi := pocRow.up_price()
+    if not na(vahRow)
+        vah := vahRow.up_price()
+    if not na(valRow)
+        val := valRow.down_price()
+    array<volume_row> rows = fp.rows()
+    rowCount := array.size(rows)
+    if rowCount > 0 and rowCount <= rowCap
+        buyImbalances := 0
+        sellImbalances := 0
+        float highestRow = na
+        float lowestRow = na
+        for row in rows
+            buyImbalances += row.has_buy_imbalance() ? 1 : 0
+            sellImbalances += row.has_sell_imbalance() ? 1 : 0
+            if na(highestRow) or row.up_price() > highestRow
+                highestRow := row.up_price()
+                topBuy := row.buy_volume()
+            if na(lowestRow) or row.down_price() < lowestRow
+                lowestRow := row.down_price()
+                bottomSell := row.sell_volume()
+            if rowLogs and barstate.isconfirmed and (rawL or rawS)
+                log.info("FP_ROW bar="+str.tostring(time)+" lo="+str.tostring(row.down_price())+" hi="+str.tostring(row.up_price())+" buy="+str.tostring(row.buy_volume())+" sell="+str.tostring(row.sell_volume())+" total="+str.tostring(row.total_volume())+" delta="+str.tostring(row.delta()))
+
+float tol = not na(total) ? math.max(0.000001, math.abs(total)*0.00000001) : 0.000001
+bool arithmeticOK = present and not na(buys) and not na(sells) and not na(total) and not na(delta) and total > 0 and buys >= 0 and sells >= 0 and math.abs(buys+sells-total) <= tol and math.abs(buys-sells-delta) <= tol
+bool levelOK = not na(pocLo) and not na(pocHi) and not na(vah) and not na(val) and pocHi >= pocLo and vah >= val
+bool rowsOK = not na(rowCount) and rowCount > 0 and rowCount <= rowCap
+bool oneSided = arithmeticOK and (buys == 0 or sells == 0)
+float deltaShare = arithmeticOK ? delta/total : na
+float volumeDiff = present and not na(volume) ? total-volume : na
+float buyPressure = arithmeticOK ? 100*buys/total : na
+// Only fields actually needed by the classifier are mandatory. POC/VA defects are separate diagnostics.
+bool known = arithmeticOK and (not needImbalance or rowsOK)
+bool passL = known and deltaShare >= minDeltaShare and (not needImbalance or buyImbalances > 0) and (not rejectOneSided or not oneSided)
+bool passS = known and deltaShare <= -minDeltaShare and (not needImbalance or sellImbalances > 0) and (not rejectOneSided or not oneSided)
+float f11L = known ? (passL ? 1.0 : 0.0) : na
+float f11S = known ? (passS ? 1.0 : 0.0) : na
+bool acceptedL = barstate.isconfirmed and coreL and (mode == "Quality only" or passL)
+bool acceptedS = barstate.isconfirmed and coreS and (mode == "Quality only" or passS)
+int acceptedMask = (acceptedL ? 1 : 0)+(acceptedS ? 2 : 0)
+// These are hypotheses about price response, NOT measured passive absorption or true exhaustion.
+float span = high-low
+bool absorptionBuyHyp = known and deltaShare >= 0.30 and span > 0 and close <= low+span/2
+bool absorptionSellHyp = known and deltaShare <= -0.30 and span > 0 and close >= low+span/2
+bool exhaustionUpHyp = known and rowsOK and high > high[1] and topBuy == 0
+bool exhaustionDownHyp = known and rowsOK and low < low[1] and bottomSell == 0
+int quality = not present ? 0 : not arithmeticOK ? 1 : not rowsOK ? 2 : oneSided ? 3 : 4
+// quality=4 means mixed sides and checked fields, never "high-resolution verified".
+
+if barstate.isconfirmed
+    string msg = "{\"schema\":\"BR3FP.1\",\"symbol\":\""+syminfo.tickerid+"\",\"tf\":\""+timeframe.period+"\",\"bar_time\":"+str.tostring(time)+",\"bar_close\":"+str.tostring(time_close)+",\"observed_at\":"+str.tostring(timenow)+",\"realtime\":"+(barstate.isrealtime ? "true" : "false")+",\"bus_valid\":"+(busValid ? "true" : "false")+",\"bus\":"+f_json(sourceBus)+",\"mode\":\""+mode+"\",\"raw\":"+str.tostring(rawMask)+",\"core\":"+str.tostring(coreMask)+",\"accepted\":"+str.tostring(acceptedMask)+",\"buy\":"+f_json(buys)+",\"sell\":"+f_json(sells)+",\"total\":"+f_json(total)+",\"delta\":"+f_json(delta)+",\"chart_volume\":"+f_json(volume)+",\"quality\":"+str.tostring(quality)+",\"rows\":"+f_json(rowCount)+",\"poc_lo\":"+f_json(pocLo)+",\"poc_hi\":"+f_json(pocHi)+",\"vah\":"+f_json(vah)+",\"val\":"+f_json(val)+",\"buy_imb_rows\":"+f_json(buyImbalances)+",\"sell_imb_rows\":"+f_json(sellImbalances)+",\"row_ticks\":"+str.tostring(ticksRow)+",\"va_percent\":"+str.tostring(vaPercent)+",\"imb_percent\":"+str.tostring(imbalancePercent)+",\"delta_threshold\":"+str.tostring(minDeltaShare)+",\"resolution\":null}"
+    if logs
+        log.info(msg)
+    if alerts and barstate.isrealtime
+        alert(msg, alert.freq_once_per_bar_close)
+
+plot(barstate.isconfirmed ? deltaShare : na, "FP_delta_share", color=color.aqua, style=plot.style_columns)
+plot(barstate.isconfirmed ? acceptedMask : na, "FP_accepted_mask", display=display.data_window)
+plot(busValid ? 1 : 0, "FP_core_bus_valid", display=display.data_window)
+plot(present ? 1 : 0, "FP_present", display=display.data_window)
+plot(arithmeticOK ? 1 : 0, "FP_arithmetic_ok", display=display.data_window)
+plot(levelOK ? 1 : 0, "FP_levels_ok", display=display.data_window)
+plot(rowsOK ? 1 : 0, "FP_rows_ok", display=display.data_window)
+plot(quality, "FP_quality_code_NOT_precision", display=display.data_window)
+plot(oneSided ? 1 : 0, "FP_one_sided", display=display.data_window)
+plot(buys, "FP_buy", display=display.data_window)
+plot(sells, "FP_sell", display=display.data_window)
+plot(total, "FP_total", display=display.data_window)
+plot(delta, "FP_delta", display=display.data_window)
+plot(volumeDiff, "FP_minus_chart_volume", display=display.data_window)
+plot(buyPressure, "FP_buy_pressure_percent", display=display.data_window)
+plot(pocLo, "FP_POC_lo", display=display.data_window)
+plot(pocHi, "FP_POC_hi", display=display.data_window)
+plot(vah, "FP_VAH", display=display.data_window)
+plot(val, "FP_VAL", display=display.data_window)
+plot(rowCount, "FP_row_count", display=display.data_window)
+plot(buyImbalances, "FP_buy_imbalance_rows", display=display.data_window)
+plot(sellImbalances, "FP_sell_imbalance_rows", display=display.data_window)
+plot(f11L, "FP_F11_L", display=display.data_window)
+plot(f11S, "FP_F11_S", display=display.data_window)
+plot(busValid and known ? scoreL+f11L : na, "FP_augmented_score_L", display=display.data_window)
+plot(busValid and known ? scoreS+f11S : na, "FP_augmented_score_S", display=display.data_window)
+plot(absorptionBuyHyp ? 1 : 0, "HYP_buy_absorption", display=display.data_window)
+plot(absorptionSellHyp ? 1 : 0, "HYP_sell_absorption", display=display.data_window)
+plot(exhaustionUpHyp ? 1 : 0, "HYP_up_exhaustion", display=display.data_window)
+plot(exhaustionDownHyp ? 1 : 0, "HYP_down_exhaustion", display=display.data_window)
+plot(barstate.isrealtime ? 1 : 0, "FP_realtime_execution", display=display.data_window)
+plot(barstate.isconfirmed ? 1 : 0, "FP_closed_bar", display=display.data_window)
+
+var table hud = table.new(position.top_right,2,8,bgcolor=color.new(color.black,10))
+if barstate.islast
+    table.cell(hud,0,0,"BR3 FP | RESEARCH",text_color=color.yellow)
+    table.cell(hud,1,0,busValid ? mode : "CONNECT BR3_BUS",text_color=color.orange)
+    table.cell(hud,0,1,"Present / arithmetic / levels",text_color=color.white)
+    table.cell(hud,1,1,str.tostring(present)+" / "+str.tostring(arithmeticOK)+" / "+str.tostring(levelOK),text_color=color.white)
+    table.cell(hud,0,2,"Buy / sell / delta",text_color=color.white)
+    table.cell(hud,1,2,f_json(buys)+" / "+f_json(sells)+" / "+f_json(delta),text_color=color.white)
+    table.cell(hud,0,3,"F11 L / S",text_color=color.white)
+    table.cell(hud,1,3,f_json(f11L)+" / "+f_json(f11S),text_color=color.white)
+    table.cell(hud,0,4,"Core / accepted mask",text_color=color.white)
+    table.cell(hud,1,4,str.tostring(coreMask)+" / "+str.tostring(acceptedMask),text_color=color.white)
+    table.cell(hud,0,5,"Row count / one sided",text_color=color.white)
+    table.cell(hud,1,5,f_json(rowCount)+" / "+str.tostring(oneSided),text_color=color.white)
+    table.cell(hud,0,6,"Underlying resolution",text_color=color.orange)
+    table.cell(hud,1,6,"UNKNOWN; reload may differ",text_color=color.orange)
+    table.cell(hud,0,7,"Decision time",text_color=color.white)
+    table.cell(hud,1,7,barstate.isconfirmed ? "BAR CLOSE" : "PREVIEW",text_color=color.white)
