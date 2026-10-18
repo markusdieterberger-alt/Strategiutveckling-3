@@ -1,0 +1,10 @@
+{
+  "frozen_at_utc": "2026-10-18T06:02:18.014552+00:00",
+  "reverse_economic_results_seen": false,
+  "sha256": {
+    "code/make_signals.py": "fa31569e5a280e411d91fc6f23da84ed0270b261e1757caa3e74db757aa600b6",
+    "code/reverse_adapter.py": "87cd9f82c9cbf8277660665159d545844a12c8de3bb4865ecd490d1e1913ff41",
+    "code/run_experiment.py": "a17bcdd632060de11d36b97dd01d65aa81a63cb2f1cbce61808b129f380f607e",
+    "code/test_reverse.py": "9d1e249721659577792bafd8fb709e90a5cf6441cbef817d824f157528f1541e"
+  }
+}
