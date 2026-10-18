@@ -1,0 +1,10 @@
+{
+  "created_utc": "2026-10-18T16:56:09.686545+00:00",
+  "sha256": {
+    "code/engine.cpp": "4f13aae92a8f28eece0f6c55d5b5ea836351fefae0abdbafa5f1ed019baa4e76",
+    "code/prepare.py": "cd63b3f408f6aced5fd1bbafe623d85f8f04b9ca4b7941e68945b7776cedb995",
+    "code/reference.py": "2699c7c5e7ee6582e9c9ed37a7ae659e2b1cffc9877ead80fb7a0e3794c470d0",
+    "code/validate.py": "8d29ce0b865ef18a39e936ba8bb67b0ecea580254811a2ffabbaf074e4946ffc",
+    "PROTOCOL.md": "216d4ceebd8666294d3b50dc1cccaf01388c39c2c47423766aacf99e42303a1e"
+  }
+}
