@@ -1,0 +1,23 @@
+test_changed_stop_is_flagged (test_qa.AlertTests.test_changed_stop_is_flagged) ... ok
+test_diagnostic_is_not_a_trade (test_qa.AlertTests.test_diagnostic_is_not_a_trade) ... ok
+test_duplicate_alert_does_not_double_count (test_qa.AlertTests.test_duplicate_alert_does_not_double_count) ... ok
+test_exit_without_entry_is_not_invented (test_qa.AlertTests.test_exit_without_entry_is_not_invented) ... ok
+test_reversal_and_partial_close_rejected (test_qa.AlertTests.test_reversal_and_partial_close_rejected) ... ok
+test_same_second_pair_is_disclosed (test_qa.AlertTests.test_same_second_pair_is_disclosed) ... ok
+test_unknown_or_future_htf_is_not_passed (test_qa.AlertTests.test_unknown_or_future_htf_is_not_passed) ... ok
+test_bracket_written_at_submission_only (test_qa.SourceAndCausalityTests.test_bracket_written_at_submission_only) ... ok
+test_htf_boundary_no_early_access (test_qa.SourceAndCausalityTests.test_htf_boundary_no_early_access) ... ok
+test_htf_offsets_and_daily_unchanged (test_qa.SourceAndCausalityTests.test_htf_offsets_and_daily_unchanged) ... ok
+test_model_region_unchanged_after_removing_telemetry (test_qa.SourceAndCausalityTests.test_model_region_unchanged_after_removing_telemetry) ... ok
+test_no_fake_native_fill_in_payload (test_qa.SourceAndCausalityTests.test_no_fake_native_fill_in_payload) ... ok
+test_original_functions_unchanged (test_qa.SourceAndCausalityTests.test_original_functions_unchanged) ... ok
+test_plot_request_budget_static (test_qa.SourceAndCausalityTests.test_plot_request_budget_static) ... ok
+test_signal_inputs_and_properties_preserved (test_qa.SourceAndCausalityTests.test_signal_inputs_and_properties_preserved) ... ok
+test_source_hash_and_deterministic_build (test_qa.SourceAndCausalityTests.test_source_hash_and_deterministic_build) ... ok
+test_tick_and_adverse_gap_bounds (test_qa.SourceAndCausalityTests.test_tick_and_adverse_gap_bounds) ... ok
+test_us_europe_dst_divergence (test_qa.SourceAndCausalityTests.test_us_europe_dst_divergence) ... ok
+
+----------------------------------------------------------------------
+Ran 18 tests in 0.129s
+
+OK

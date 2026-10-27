@@ -1,0 +1,190 @@
+{
+  "scope": "SOURCE DEFAULTS ONLY, NOT EFFECTIVE SERVER SETTINGS",
+  "source_sha256": "c386f4f7d3e30e3ebfe57ebe5e35e40c5560fda88b7f38296405d080ebbcf8e8",
+  "strategy_declaration": "strategy(\"EAA CT Scalper STRATEGY V1\", overlay=true,\n     max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=500,\n     initial_capital=25000, currency=currency.USD,\n     default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=0,\n     commission_type=strategy.commission.cash_per_contract, commission_value=0.50,\n     slippage=1, backtest_fill_limits_assumption=1,\n     margin_long=5, margin_short=5, use_bar_magnifier=true,\n     calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=false)",
+  "source_inputs": [
+    {
+      "source_line": 23,
+      "declaration": "int eaaContracts = input.int(1, \"Contracts\", minval=1, maxval=20, group=eaaGroup)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 24,
+      "declaration": "int eaaStart = input.time(timestamp(\"09 Sep 2026 00:00 -0400\"), \"Test start\", group=eaaGroup)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 25,
+      "declaration": "int eaaEnd = input.time(timestamp(\"09 Oct 2026 00:00 -0400\"), \"Test end (exclusive)\", group=eaaGroup)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 26,
+      "declaration": "bool eaaRequireFp = input.bool(true, \"Require 11 consecutive footprint bars\", group=eaaGroup,\n     tooltip=\"Execution data guard. Raw original signals and fallbacks are still calculated. Turning this off is a separate diagnostic run.\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 28,
+      "declaration": "int eaaStressSlip = input.int(1, \"Stress stop slippage (ticks)\", minval=0, group=eaaGroup,\n     tooltip=\"Only the separate stress ledger. Match Properties slippage. Does NOT change actual strategy orders.\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "REMOVED_COUNTERFACTUAL_STRESS_LEDGER"
+    },
+    {
+      "source_line": 58,
+      "declaration": "ctLongsEnabled  = input.bool(true,  \"Enable CT Longs\",  group=g1)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 59,
+      "declaration": "ctShortsEnabled = input.bool(true,  \"Enable CT Shorts\", group=g1)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 60,
+      "declaration": "adxMin          = input.int(20,     \"ADX Minimum\",      group=g1, tooltip=\"Lower than trend-following — CT trades need trend to exist but not be overwhelming\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 61,
+      "declaration": "ctMinConf       = input.int(3,      \"Min Confidence (0-8)\", group=g1, minval=0, maxval=8, tooltip=\"Minimum CT confidence score to fire. Higher = fewer but better CT trades.\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 64,
+      "declaration": "ctSlBuffer   = input.float(1.0, \"SL Buffer (xATR beyond extreme)\", group=g2, tooltip=\"Dynamic buffer added beyond swing extreme for SL.\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 65,
+      "declaration": "ctTpConserv  = input.float(0.85, \"TP Cap (% of mean distance)\",   group=g2, tooltip=\"Don't expect full reversion. 0.85 = take 85% of move to mean.\")",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 66,
+      "declaration": "ctMinProfit  = input.float(5.0,  \"Min Profit (pts)\",               group=g2)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 71,
+      "declaration": "useFade   = input.bool(true,  \"FADE (overextension fade)\",     group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 72,
+      "declaration": "useDiv    = input.bool(true,  \"DIV (delta divergence)\",        group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 73,
+      "declaration": "useTrap   = input.bool(true,  \"TRAP (liquidity sweep fade)\",   group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 74,
+      "declaration": "useAgg    = input.bool(true,  \"AGG (aggressive flow fade)\",    group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 75,
+      "declaration": "useAbsorb = input.bool(true,  \"ABSORB (absorption at extreme)\", group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 76,
+      "declaration": "useVrz    = input.bool(true,  \"VRZ (volume range zone retest)\", group=g3)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 79,
+      "declaration": "sweepLen    = input.int(20,  \"Sweep Lookback\",        group=g4)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 80,
+      "declaration": "divLookback = input.int(5,   \"Div Pivot Lookback\",    group=g4)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 83,
+      "declaration": "minRelVol  = input.float(0.5, \"Min Relative Volume\",  group=g5)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 84,
+      "declaration": "minAtrPts  = input.float(3.0, \"Min ATR (points)\",     group=g5)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 87,
+      "declaration": "showDashboard    = input.bool(true,  \"Show Dashboard\",       group=g6)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 88,
+      "declaration": "showSuperTrend   = input.bool(false, \"Show SuperTrend\",      group=g6)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    },
+    {
+      "source_line": 89,
+      "declaration": "showVwapBands    = input.bool(true,  \"Show VWAP StdDev Bands\", group=g6)",
+      "native_server_value": "UNKNOWN",
+      "v2_status": "PRESERVED"
+    }
+  ],
+  "v2_added_inputs": {
+    "v2PineLogs": false,
+    "v2DiagAlerts": false,
+    "v2TraceAllBars": false
+  },
+  "diagnostic_added_input": {
+    "v2ConfirmedHtf": false
+  },
+  "v2_fixed_confirmed_htf": true,
+  "required_native_manifest_fields": [
+    "source export/hash",
+    "alert creation UTC",
+    "alert name",
+    "ticker prefix",
+    "data delay and entitlement",
+    "standard candles",
+    "timeframe",
+    "chart timezone",
+    "session",
+    "roll/backadjustment",
+    "loaded history range",
+    "test start/end",
+    "all inputs",
+    "all Strategy Properties",
+    "commission",
+    "slippage",
+    "margin",
+    "capital",
+    "sizing",
+    "Bar Magnifier",
+    "limit verification",
+    "calculation/fill options"
+  ]
+}

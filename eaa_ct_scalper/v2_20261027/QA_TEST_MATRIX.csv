@@ -1,0 +1,11 @@
+id,comparison,controlled_dimension,status,scope_or_blocker
+D0,Diagnostic LEGACY vs isolated V1,identical inputs/properties/feed,BLOCKED,native auth + server identity
+D1,Confirmed vs developing HTF,v2ConfirmedHtf only,BLOCKED,native auth; local timing predicate tested separately
+D2,Footprint availability/gate,eaaRequireFp only,BLOCKED,native footprint telemetry missing
+D3,Calculation modes,one Property per pair,BLOCKED,native auth; strict V2 guard statically checked
+D4,Bracket/path/slippage,Bar Magnifier only then slippage only,BLOCKED,native auth and tick path missing
+D5,Reload reproducibility,reload only,BLOCKED,no native before/after capture
+D6,Realtime V1 vs V2,separate simultaneous instances,BLOCKED,operator activation + source settings + native compile required
+L1,Source/model/HTF preservation,static source comparisons,LOCAL TESTED,see local_test_output.txt
+L2,Time boundary/DST/tick/gap,synthetic semantic fixtures,LOCAL TESTED,not CT replay
+L3,Alert reconciliation invariants,synthetic JSON events,LOCAL TESTED,not native order-fill events

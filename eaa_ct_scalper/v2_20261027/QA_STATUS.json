@@ -1,0 +1,66 @@
+{
+  "version": "EAA_CT_V2_2.0.0",
+  "as_of_utc": "2026-10-27",
+  "decision": "REVISE",
+  "source_release_compile_label": "COMPILE NOT VERIFIED",
+  "native_compile_attempt": {
+    "utc": "2026-10-27T10:02:02Z",
+    "source_commit": "fd67c775dc529409c2ed29ab3aab040559d6fd9a",
+    "source_sha256": "a451d1d8763974612f3f65dacd983eacac3e1c9312d5b2c381f5c81c260cd2c7",
+    "result": "BLOCKED_AUTHENTICATION",
+    "action": "V2 loaded into new Untitled Pine editor; Add to chart opened Log in dialog",
+    "surface": "Anonymous delayed CME_MINI_DL:MNQ1! chart, 1D default; not authorized 1m Premium fixture",
+    "compile_result_received": false
+  },
+  "native_forward_observation_seconds": 0,
+  "native_forward_trades": 0,
+  "active_v1_changed": false,
+  "alerts_created_or_changed": false,
+  "gates": [
+    {
+      "gate": "Source Identity - local source",
+      "status": "VERIFIERAT PASS",
+      "evidence": "Frozen source hash; deterministic derivation; six original models and price functions unchanged."
+    },
+    {
+      "gate": "Source Identity - active server/chart",
+      "status": "OKANT / BLOCKED",
+      "evidence": "Active alert snapshot and effective chart/server Properties unavailable."
+    },
+    {
+      "gate": "Pine Compile",
+      "status": "BLOCKED",
+      "evidence": "2026-10-27 10:02:02 UTC: Add to chart on isolated editor opened Log in dialog; no compiler result."
+    },
+    {
+      "gate": "Execution",
+      "status": "BLOCKED",
+      "evidence": "No native V2 run; local semantic fixtures are not native lifecycle evidence."
+    },
+    {
+      "gate": "Alert Parity",
+      "status": "BLOCKED",
+      "evidence": "No V2 alert created; zero paired native realtime V1/V2 events."
+    },
+    {
+      "gate": "Non-Repaint",
+      "status": "BLOCKED",
+      "evidence": "Confirmed-HTF source pattern checked; no native reload comparison and no feed-stability proof."
+    },
+    {
+      "gate": "Bracket Risk",
+      "status": "BLOCKED",
+      "evidence": "Intended bracket provenance implemented; actual gap/path behavior unverified."
+    },
+    {
+      "gate": "Funded Simulation",
+      "status": "BLOCKED / NOT RUN",
+      "evidence": "No independent execution validation; no funded simulation performed."
+    },
+    {
+      "gate": "LIVE Readiness",
+      "status": "BLOCKED",
+      "evidence": "No authorization or native forward validation."
+    }
+  ]
+}

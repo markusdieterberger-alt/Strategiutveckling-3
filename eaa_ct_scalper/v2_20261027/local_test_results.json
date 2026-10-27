@@ -1,0 +1,31 @@
+{
+  "scope": "LOCAL SOURCE AND SYNTHETIC TESTS ONLY; NOT PINE COMPILATION OR CT REPLAY",
+  "utc": "2026-10-27T10:11:26.552628+00:00",
+  "python": "3.12.14",
+  "tests": 18,
+  "failures": 0,
+  "errors": 0,
+  "skipped": 0,
+  "native_forward_trades": 0,
+  "native_observation_seconds": 0,
+  "source_budget": {
+    "EAA_CT_SCALPER_V2_DEV.pine": {
+      "bytes": 125170,
+      "sha256": "a451d1d8763974612f3f65dacd983eacac3e1c9312d5b2c381f5c81c260cd2c7",
+      "plot_count_static_estimate": 58,
+      "request_security_calls": 9,
+      "request_footprint_calls": 1,
+      "native_compiled_tokens": "UNKNOWN",
+      "native_execution_time": "UNKNOWN"
+    },
+    "EAA_CT_DIAGNOSTIC_V1_V2.pine": {
+      "bytes": 127048,
+      "sha256": "ffca82f09bffd6978e1d399cbdded2e5ae2e5e17058281894727d83ddbb0e4e1",
+      "plot_count_static_estimate": 58,
+      "request_security_calls": 13,
+      "request_footprint_calls": 1,
+      "native_compiled_tokens": "UNKNOWN",
+      "native_execution_time": "UNKNOWN"
+    }
+  }
+}
