@@ -1,0 +1,724 @@
+--- PRISTINE_V1
++++ EAA_CT_SCALPER_V2_DEV.pine
+@@ -1,16 +1,11 @@
+-// ╔══════════════════════════════════════════════════════════════╗
+-// NQ/MNQ Counter-Trend Scalper v1 — PineScript v6 — INDICATOR
+-// Mean reversion fades: FADE, DIV, TRAP, AGG, ABSORB
+-// Standalone — own state, own tickets, own TP/SL
+-// Designed to run alongside NQ/MNQ Scalper v11 (trend-following)
+-// ╚══════════════════════════════════════════════════════════════╝
+-
+ //@version=6
+-// EAA V1 / execution-fixed derivative of the uploaded INDICATOR.
+-// NOT compiled in TradingView. No historical performance has been verified.
+-// Native bracket results and the separate stop-first stress ledger differ.
+-// Developing HTF values are deliberately preserved: research, NOT live-ready.
+-strategy("EAA CT Scalper STRATEGY V1", overlay=true,
++// Isolated research implementation. COMPILE NOT VERIFIED at source release.
++// Native compile/execution evidence is versioned separately in QA_STATUS.json.
++// Non-Repaint is a design objective, NOT a verified property of footprint/feed data.
++// No broker integration; native TV emulator is the only trade book.
++// Derived from immutable V1 SHA256 c386f4f7d3e30e3ebfe57ebe5e35e40c5560fda88b7f38296405d080ebbcf8e8
++// Preserve the active V1 and all its alerts. Default test dates remain V1 dates.
++strategy("EAA CT Scalper V2 - Non-Repaint & Alert Parity DEV", overlay=true,
+      max_lines_count=500, max_labels_count=500, max_boxes_count=500, max_bars_back=500,
+      initial_capital=25000, currency=currency.USD,
+      default_qty_type=strategy.fixed, default_qty_value=1, pyramiding=0,
+@@ -25,8 +20,42 @@
+ int eaaEnd = input.time(timestamp("09 Oct 2026 00:00 -0400"), "Test end (exclusive)", group=eaaGroup)
+ bool eaaRequireFp = input.bool(true, "Require 11 consecutive footprint bars", group=eaaGroup,
+      tooltip="Execution data guard. Raw original signals and fallbacks are still calculated. Turning this off is a separate diagnostic run.")
+-int eaaStressSlip = input.int(1, "Stress stop slippage (ticks)", minval=0, group=eaaGroup,
+-     tooltip="Only the separate stress ledger. Match Properties slippage. Does NOT change actual strategy orders.")
++
++// QA instrumentation. These inputs do not change CT signal thresholds.
++string v2Version = "EAA_CT_V2_2.0.0"
++string v2Group = "V2 - QA only, no live approval"
++bool v2PineLogs = input.bool(false, "Pine Logs: diagnostic decisions and native observations", group=v2Group)
++bool v2DiagAlerts = input.bool(false, "Separate diagnostic alert() events - NOT trades", group=v2Group)
++bool v2TraceAllBars = input.bool(false, "Trace every bar inside test dates (otherwise candidates/events)", group=v2Group)
++varip int v2CalcBar = na
++varip int v2CalcInBar = 0
++if na(v2CalcBar) or v2CalcBar != bar_index
++    v2CalcBar := bar_index
++    v2CalcInBar := 1
++else
++    v2CalcInBar += 1
++
++f_v2Num(float x) => na(x) ? "null" : str.tostring(x, "#.########")
++// All string fields below are fixed code literals, model IDs or chart ticker IDs.
++// No free-text input is interpolated into JSON. Fill values exist only in the outer TV template.
++f_v2Context(string model, int side, string entryId, string bracketId, float sl, float tp, int gates, int rawMask, string htfSnapshot, string fpSnapshot) =>
++    '{"version":"' + v2Version + '","model":"' + model + '","side":' + str.tostring(side) +
++     ',"entry_order_id":"' + entryId + '","bracket_order_id":"' + bracketId + '","ticker":"' + syminfo.tickerid +
++     '","signal_bar_ms":' + str.tostring(time) + ',"signal_close_ms":' + str.tostring(time_close) +
++     ',"signal_close":' + f_v2Num(close) + ',"intended_qty":' + str.tostring(eaaContracts) +
++     ',"intended_sl":' + f_v2Num(sl) + ',"intended_tp":' + f_v2Num(tp) +
++     ',"test_start_ms":' + str.tostring(eaaStart) + ',"test_end_ms":' + str.tostring(eaaEnd) +
++     ',"fp_guard":' + (eaaRequireFp ? "true" : "false") + ',"exec_gates":' + str.tostring(gates) +
++     ',"raw_mask":' + str.tostring(rawMask) + ',"htf":' + htfSnapshot + ',"footprint":' + fpSnapshot + '}'
++
++f_v2Intent(string phase, string context, int createdMs) =>
++    '{"phase":"' + phase + '","order_created_ms":' + str.tostring(createdMs) + ',"context":' + context + '}'
++
++bool v2ConfirmedHtf = true
++// Fail visibly on unsupported repeated/intrabar calculations; do not silently
++// mutate cumulative/stateful V1 logic under Properties overrides.
++if not barstate.isconfirmed or v2CalcInBar > 1
++    runtime.error("V2 requires one calculation per closed bar. Disable On every tick and After order is filled; capture Properties.")
+ 
+ // New protocol constraints, not changes to the original signal filters.
+ // LucidFlex regular-day model: America/New_York, flat at 16:44, reopen 18:00.
+@@ -45,9 +74,9 @@
+ 
+ if barstate.isfirst
+     if not timeframe.isminutes or timeframe.multiplier != 1
+-        runtime.error("EAA CT V1 protocol requires a 1-minute chart.")
++        runtime.error("EAA CT V2 protocol requires a 1-minute chart.")
+     if syminfo.type != "futures" or (syminfo.root != "MNQ" and syminfo.root != "NQ")
+-        runtime.error("EAA CT V1 requires MNQ or NQ futures. Default run: CME_MINI:MNQ1!.")
++        runtime.error("EAA CT V2 requires MNQ or NQ futures. Default run: CME_MINI:MNQ1!.")
+     if not chart.is_standard
+         runtime.error("Use standard candles, not synthetic chart prices.")
+     if eaaEnd <= eaaStart
+@@ -505,19 +534,18 @@
+      hlc3[1] + (high[1] - low[1]), hlc3[1] - (high[1] - low[1])],
+     lookahead=barmerge.lookahead_on)
+ 
+-// ── HTF GATE — tuple-merged ───────────────────────────────
+-[h5f, h5s, h5c, h5mid] = request.security(syminfo.tickerid, "5",
+-    [ta.ema(close, 9), ta.ema(close, 21), close, (ta.highest(high, 20) + ta.lowest(low, 20)) / 2],
+-    lookahead=barmerge.lookahead_off)
+-[h15f, h15s, h15c, h15mid] = request.security(syminfo.tickerid, "15",
+-    [ta.ema(close, 9), ta.ema(close, 21), close, (ta.highest(high, 20) + ta.lowest(low, 20)) / 2],
+-    lookahead=barmerge.lookahead_off)
+-[h60f, h60s, h60c, h60mid] = request.security(syminfo.tickerid, "60",
+-    [ta.ema(close, 9), ta.ema(close, 21), close, (ta.highest(high, 20) + ta.lowest(low, 20)) / 2],
+-    lookahead=barmerge.lookahead_off)
+-[h4f, h4s] = request.security(syminfo.tickerid, "240",
+-    [ta.ema(close, 9), ta.ema(close, 21)],
+-    lookahead=barmerge.lookahead_off)
++// Confirmed HTF timestamps are observational; no new warmup filter.
++[h5f, h5s, h5c, h5mid, h5KnownClose] = request.security(syminfo.tickerid, "5",
++    [ta.ema(close, 9)[1], ta.ema(close, 21)[1], close[1], (ta.highest(high, 20)[1] + ta.lowest(low, 20)[1]) / 2, time_close[1]], lookahead=barmerge.lookahead_on)
++[h15f, h15s, h15c, h15mid, h15KnownClose] = request.security(syminfo.tickerid, "15",
++    [ta.ema(close, 9)[1], ta.ema(close, 21)[1], close[1], (ta.highest(high, 20)[1] + ta.lowest(low, 20)[1]) / 2, time_close[1]], lookahead=barmerge.lookahead_on)
++[h60f, h60s, h60c, h60mid, h60KnownClose] = request.security(syminfo.tickerid, "60",
++    [ta.ema(close, 9)[1], ta.ema(close, 21)[1], close[1], (ta.highest(high, 20)[1] + ta.lowest(low, 20)[1]) / 2, time_close[1]], lookahead=barmerge.lookahead_on)
++[h4f, h4s, h4KnownClose] = request.security(syminfo.tickerid, "240",
++    [ta.ema(close, 9)[1], ta.ema(close, 21)[1], time_close[1]], lookahead=barmerge.lookahead_on)
++bool v2HtfReady = not na(h5KnownClose) and not na(h15KnownClose) and not na(h60KnownClose) and not na(h4KnownClose)
++if v2ConfirmedHtf and v2HtfReady and math.max(math.max(h5KnownClose, h15KnownClose), math.max(h60KnownClose, h4KnownClose)) > time
++    runtime.error("Confirmed HTF known-time invariant failed.")
+ 
+ // HTF confluence score
+ f_tfVote(float c, float fast, float slow, float mid) =>
+@@ -586,6 +614,7 @@
+ float fpDelta    = not na(fp) ? fp.delta()         : 0.0
+ float fpTotalVol = not na(fp) ? fp.total_volume()  : volume
+ 
++bool v2PocFresh = false
+ float fpVAH = na
+ float fpVAL = na
+ 
+@@ -594,6 +623,7 @@
+     volume_row vahRow = fp.vah()
+     volume_row valRow = fp.val()
+     if not na(pocRow)
++        v2PocFresh := true
+         fpPocMid := (pocRow.up_price() + pocRow.down_price()) / 2.0
+     if not na(vahRow)
+         fpVAH := vahRow.up_price()
+@@ -1263,9 +1293,17 @@
+ var int eaaSide = 0
+ var int eaaSubmittedBar = na
+ var string eaaEntryId = ""
++var string v2BracketId = ""
++var string v2TradeContext = "null"
++var string v2EntryPayload = "null"
++var string v2BracketPayload = "null"
++var string v2TpPayload = "null"
++var string v2SlPayload = "null"
++var int v2SignalBarMs = na
++var int v2SubmitMs = na
++
+ var bool eaaTradeAmbiguous = false
+ var bool eaaSawFill = false
+-var float eaaStressStop = na
+ var int eaaAmbiguousTrades = 0
+ var int eaaSameBarTrades = 0
+ var int eaaGapEntries = 0
+@@ -1280,7 +1318,6 @@
+ var int eaaConflicts = 0
+ var int eaaUnfilledOrders = 0
+ var int eaaAuditedTrades = 0
+-var float eaaStressNet = 0.0
+ 
+ bool eaaInDates = time_close >= eaaStart and time_close < eaaEnd
+ eaaFootprintStreak := not na(fp) ? eaaFootprintStreak + 1 : 0
+@@ -1301,7 +1338,6 @@
+ int eaaAuditSide = eaaHadExposure ? eaaSide : 0
+ bool eaaBothNow = eaaHadExposure and low <= math.min(ctActiveSl, ctActiveTp) and high >= math.max(ctActiveSl, ctActiveTp)
+ float eaaClosedNativeNet = na
+-float eaaClosedStressNet = na
+ int eaaClosedAmbiguous = 0
+ int eaaClosedExitTime = na
+ 
+@@ -1309,13 +1345,20 @@
+     eaaExposureGaps += 1
+ if eaaBothNow
+     eaaTradeAmbiguous := true
+-    // Stop-first OHLC envelope: adverse gap, then adverse stop slippage.
+-    // This does NOT rewrite TradingView trades or pretend to know tick order.
+-    float adverseOpen = eaaSide == 1 ? math.min(open, ctActiveSl) : math.max(open, ctActiveSl)
+-    float adverseExit = adverseOpen - eaaSide * eaaStressSlip * syminfo.mintick
+-    eaaStressStop := na(eaaStressStop) ? adverseExit : eaaSide == 1 ? math.min(eaaStressStop, adverseExit) : math.max(eaaStressStop, adverseExit)
+-
+-if not eaaSawFill and (strategy.position_size != 0 or eaaClosedNow)
++
++bool v2ObserveEntry = not eaaSawFill and (strategy.position_size != 0 or eaaClosedNow)
++float v2EntryPriceObserved = na
++int v2EntryTimeObserved = na
++float v2ExitPriceObserved = na
++int v2ExitReason = 0
++float v2ActualQty = na
++if v2ObserveEntry
++    v2EntryPriceObserved := strategy.position_size != 0 ? strategy.position_avg_price : strategy.closedtrades.entry_price(strategy.closedtrades - 1)
++    v2EntryTimeObserved := strategy.position_size != 0 ? strategy.opentrades.entry_time(0) : strategy.closedtrades.entry_time(strategy.closedtrades - 1)
++    v2ActualQty := strategy.position_size != 0 ? math.abs(strategy.position_size) : math.abs(strategy.closedtrades.size(strategy.closedtrades - 1))
++    if v2PineLogs
++        log.info("NATIVE_ENTRY_OBSERVED | " + v2EntryPayload + " | observed_at_ms=" + str.tostring(time_close) + " | native_entry_ms=" + str.tostring(v2EntryTimeObserved) + " | native_price=" + str.tostring(v2EntryPriceObserved, format.mintick))
++if v2ObserveEntry
+     float filledAt = strategy.position_size != 0 ? strategy.position_avg_price : strategy.closedtrades.entry_price(strategy.closedtrades - 1)
+     if eaaSide * (filledAt - ctActiveSl) <= 0 or eaaSide * (ctActiveTp - filledAt) <= 0
+         eaaGapEntries += 1
+@@ -1326,6 +1369,11 @@
+         runtime.error("EAA single-slot invariant failed: multiple closes in one bar.")
+     int tradeNo = strategy.closedtrades - 1
+     string exitComment = strategy.closedtrades.exit_comment(tradeNo)
++    v2ExitReason := exitComment == "SL" ? 1 : exitComment == "TP" ? 2 : exitComment == "PAT" ? 3 : exitComment == "SESSION_OR_TEST_END" ? 4 : 9
++    v2ExitPriceObserved := strategy.closedtrades.exit_price(tradeNo)
++    v2ActualQty := math.abs(strategy.closedtrades.size(tradeNo))
++    if v2PineLogs
++        log.info("NATIVE_EXIT_OBSERVED | " + v2EntryPayload + " | observed_at_ms=" + str.tostring(time_close) + " | native_exit_ms=" + str.tostring(strategy.closedtrades.exit_time(tradeNo)) + " | native_price=" + str.tostring(v2ExitPriceObserved, format.mintick) + " | reason=" + exitComment)
+     bool expectedExit = exitComment == "SL" or exitComment == "TP" or exitComment == "PAT" or exitComment == "SESSION_OR_TEST_END"
+     if math.abs(strategy.closedtrades.size(tradeNo)) != eaaContracts or eaaSide == 0 or not expectedExit
+         runtime.error("EAA closed-trade invariant failed (size/state/liquidation). This run is invalid.")
+@@ -1336,9 +1384,6 @@
+     float actualExit = strategy.closedtrades.exit_price(tradeNo)
+     float fees = strategy.closedtrades.commission(tradeNo)
+     eaaClosedNativeNet := eaaSide * (actualExit - actualEntry) * syminfo.pointvalue * qty - fees
+-    float adverseNet = eaaTradeAmbiguous ? eaaSide * (eaaStressStop - actualEntry) * syminfo.pointvalue * qty - fees : eaaClosedNativeNet
+-    eaaClosedStressNet := math.min(eaaClosedNativeNet, adverseNet)
+-    eaaStressNet += eaaClosedStressNet
+     eaaClosedAmbiguous := eaaTradeAmbiguous ? 1 : 0
+     eaaAmbiguousTrades += eaaClosedAmbiguous
+     eaaSameBarTrades += strategy.closedtrades.entry_bar_index(tradeNo) == strategy.closedtrades.exit_bar_index(tradeNo) ? 1 : 0
+@@ -1353,7 +1398,6 @@
+     eaaEntryId := ""
+     eaaSawFill := false
+     eaaTradeAmbiguous := false
+-    eaaStressStop := na
+ 
+ // Margin/order rejection must not leave the single slot permanently reserved.
+ bool eaaUnfilledNow = eaaSide != 0 and not na(eaaSubmittedBar) and bar_index > eaaSubmittedBar and strategy.position_size == 0 and not eaaClosedNow
+@@ -1367,7 +1411,6 @@
+     ctActiveTp := na
+     ctEntryAtr := na
+     eaaTradeAmbiguous := false
+-    eaaStressStop := na
+ 
+ bool ctInLong = strategy.position_size > 0
+ bool ctInShort = strategy.position_size < 0
+@@ -1383,6 +1426,10 @@
+ float ctTpProgressShort = ctInShort and not na(ctActiveTp) and (ctEntryPrice - ctActiveTp) > 0 ? (ctEntryPrice - close) / (ctEntryPrice - ctActiveTp) : 0.0
+ 
+ // Raw candidates, evaluated even while occupied. Their filters are unchanged.
++int v2EvalMask = 0
++int v2FlowMask = 0
++int v2RawMask = 0
++int v2PrioritySkipped = 0
+ bool ctLongFiredThisBar = false
+ bool ctShortFiredThisBar = false
+ float eaaRawLongSl = na
+@@ -1455,57 +1502,77 @@
+     adfAdj  = adfMeanRevert ? -1 : adfTrending ? 1 : 0
+     math.max(1, math.min(6, base + sessAdj + adxAdj + htfAdj + hurstAdj + adfAdj))
+ 
++if useFade and ctLongFiredThisBar
++    v2PrioritySkipped += 1
+ if useFade and ctGateLong and not ctLongFiredThisBar and not hurstPersist and not csDoji
++    v2EvalMask += 1
+     int fadeConf = (bigLowerWick ? 1 : 0) + (deltaFlipBull ? 1 : 0) + (absorbBull ? 1 : 0) + (momDecelBear ? 1 : 0) + (momFlipBull ? 1 : 0) + (sqzFired and sqzMom > 0 ? 1 : 0) + (freeBarBelow ? 1 : 0) + ((csBullEngulf or csHammer) and not csDoji ? (isOpen ? 1 : isMorning ? 1 : inAsia ? 0 : isAfternoon ? 1 : aerTrending and adx >= 25 ? 1 : 1) : 0) + (chochBull ? (isOpen ? 2 : isMorning ? 2 : inAsia ? 0 : isAfternoon ? 1 : aerTrending and adx >= 30 ? 2 : aerTrending ? 2 : 1) : 0) + (smtBull ? (isOpen ? 2 : isMorning ? 2 : inAsia ? 0 : isAfternoon ? 1 : adx >= 30 ? 2 : 1) : 0)
+     float fadeMomPen = sqzMom < 0 and not momDecelBear ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float fadeSessPen = thinSess and fadeMomPen > 0 ? 1 : 0
+     if fadeConf >= f_fadeMinConf() + fadeMomPen + fadeSessPen + ctExtraConfBuy
++        v2FlowMask += 1
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "FADE"
++            v2RawMask += 1
+             ctLongFiredThisBar := true
+ 
++if useFade and ctShortFiredThisBar
++    v2PrioritySkipped += 64
+ if useFade and ctGateShort and not ctShortFiredThisBar and not hurstPersist and not csDoji
++    v2EvalMask += 64
+     int fadeConf = (bigUpperWick ? 1 : 0) + (deltaFlipBear ? 1 : 0) + (absorbBear ? 1 : 0) + (momDecelBull ? 1 : 0) + (momFlipBear ? 1 : 0) + (sqzFired and sqzMom < 0 ? 1 : 0) + (freeBarAbove ? 1 : 0) + ((csBearEngulf or csShootSt) and not csDoji ? (isOpen ? 1 : isMorning ? 1 : inAsia ? 0 : isAfternoon ? 1 : aerTrending and adx >= 25 ? 1 : 1) : 0) + (chochBear ? (isOpen ? 2 : isMorning ? 2 : inAsia ? 0 : isAfternoon ? 1 : aerTrending and adx >= 30 ? 2 : aerTrending ? 2 : 1) : 0) + (smtBear ? (isOpen ? 2 : isMorning ? 2 : inAsia ? 0 : isAfternoon ? 1 : adx >= 30 ? 2 : 1) : 0)
+     float fadeMomPen = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float fadeSessPen = thinSess and fadeMomPen > 0 ? 1 : 0
+     if fadeConf >= f_fadeMinConf() + fadeMomPen + fadeSessPen + ctExtraConfSell
++        v2FlowMask += 64
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "FADE"
++            v2RawMask += 64
+             ctShortFiredThisBar := true
+ 
+ // Priority 2: DIV — delta divergence at extreme
++if useDiv and ctLongFiredThisBar
++    v2PrioritySkipped += 2
+ if useDiv and ctGateLong and not ctLongFiredThisBar
++    v2EvalMask += 2
+     float divFlowConf = (fpDivBull ? 1 : 0) + (strongDivBull ? 1 : 0) + (deltaFlipBull ? 1 : 0) + (momDecelBear ? 1 : 0)
+     float divMomPen = sqzMom < 0 and not momDecelBear ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float divSessPen = thinSess and divMomPen > 0 ? 1 : 0
+     if divFlowConf >= 1 + divMomPen + divSessPen + ctExtraConfBuy
++        v2FlowMask += 2
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "DIV"
++            v2RawMask += 2
+             ctLongFiredThisBar := true
+ 
++if useDiv and ctShortFiredThisBar
++    v2PrioritySkipped += 128
+ if useDiv and ctGateShort and not ctShortFiredThisBar
++    v2EvalMask += 128
+     float divFlowConf = (fpDivBear ? 1 : 0) + (strongDivBear ? 1 : 0) + (deltaFlipBear ? 1 : 0) + (momDecelBull ? 1 : 0)
+     float divMomPen = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float divSessPen = thinSess and divMomPen > 0 ? 1 : 0
+     if divFlowConf >= 1 + divMomPen + divSessPen + ctExtraConfSell
++        v2FlowMask += 128
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "DIV"
++            v2RawMask += 128
+             ctShortFiredThisBar := true
+ 
+ // Priority 3: TRAP — liquidity sweep against trend
+@@ -1518,7 +1585,10 @@
+     adfAdj  = adfMeanRevert ? -0.1 : adfTrending ? 0.1 : 0.0
+     math.max(1.0, math.min(2.0, base + sessAdj + adxAdj + hurstAdj + adfAdj))
+ 
++if useTrap and ctLongFiredThisBar
++    v2PrioritySkipped += 4
+ if useTrap and ctGateLong and not ctLongFiredThisBar
++    v2EvalMask += 4
+     // bearSweep = swept lows, closed back above → CT BUY
+     // Flow confirmation count — normally need 1, but strong accelerating momentum requires 2
+     float trapFlowConf = (fpDeltaBull ? 1 : 0) + (fpBuyRatio >= f_trapFpRatioThresh() ? 1 : 0) + (deltaFlipBull ? 1 : 0)
+@@ -1526,84 +1596,111 @@
+     float sessPenalty = thinSess and momPenalty > 0 ? 1 : 0
+     bool trapConfirm = bearSweep and trapFlowConf >= 1 + momPenalty + sessPenalty
+     if trapConfirm
++        v2FlowMask += 4
+         tpCand = f_ctTpLong()
+         slCand = math.min(f_ctSlLong(), low - atr * f_ctSlBuffer())  // SL beyond the sweep wick
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "TRAP"
++            v2RawMask += 4
+             ctLongFiredThisBar := true
+ 
++if useTrap and ctShortFiredThisBar
++    v2PrioritySkipped += 256
+ if useTrap and ctGateShort and not ctShortFiredThisBar
++    v2EvalMask += 256
+     // Flow confirmation count — normally need 1, but strong accelerating momentum requires 2
+     float trapFlowConf = (fpDeltaBear ? 1 : 0) + (fpSellRatio >= f_trapFpRatioThresh() ? 1 : 0) + (deltaFlipBear ? 1 : 0)
+     float momPenalty = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float sessPenalty = thinSess and momPenalty > 0 ? 1 : 0
+     bool trapConfirm = bullSweep and trapFlowConf >= 1 + momPenalty + sessPenalty
+     if trapConfirm
++        v2FlowMask += 256
+         tpCand = f_ctTpShort()
+         slCand = math.max(f_ctSlShort(), high + atr * f_ctSlBuffer())
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "TRAP"
++            v2RawMask += 256
+             ctShortFiredThisBar := true
+ 
+ // Priority 4: AGG — aggressive institutional flow against trend
++if useAgg and ctLongFiredThisBar
++    v2PrioritySkipped += 8
+ if useAgg and ctGateLong and not ctLongFiredThisBar
++    v2EvalMask += 8
+     // aggBuy against a downtrend → CT BUY
+     // Momentum confluence: strong bearish momentum requires additional flow confirmation
+     float aggFlowConf = (fpDeltaBull ? 1 : 0) + (deltaFlipBull ? 1 : 0) + (momDecelBear ? 1 : 0)
+     float aggMomPenalty = sqzMom < 0 and not momDecelBear ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float aggSessPenalty = thinSess and aggMomPenalty > 0 ? 1 : 0
+     if aggBuy and aggFlowConf >= aggMomPenalty + aggSessPenalty
++        v2FlowMask += 8
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "AGG"
++            v2RawMask += 8
+             ctLongFiredThisBar := true
+ 
++if useAgg and ctShortFiredThisBar
++    v2PrioritySkipped += 512
+ if useAgg and ctGateShort and not ctShortFiredThisBar
++    v2EvalMask += 512
+     float aggFlowConf = (fpDeltaBear ? 1 : 0) + (deltaFlipBear ? 1 : 0) + (momDecelBull ? 1 : 0)
+     float aggMomPenalty = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float aggSessPenalty = thinSess and aggMomPenalty > 0 ? 1 : 0
+     if aggSell and aggFlowConf >= aggMomPenalty + aggSessPenalty
++        v2FlowMask += 512
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "AGG"
++            v2RawMask += 512
+             ctShortFiredThisBar := true
+ 
+ // Priority 5: ABSORB — absorption at extreme (new from research)
++if useAbsorb and ctLongFiredThisBar
++    v2PrioritySkipped += 16
+ if useAbsorb and ctGateLong and not ctLongFiredThisBar
++    v2EvalMask += 16
+     // Absorption at lows → CT BUY (limit buyers soaking aggressive sellers)
+     float absFlowConf = (absorbBull ? 1 : 0) + (fpDeltaBull ? 1 : 0) + (deltaFlipBull ? 1 : 0) + (momDecelBear ? 1 : 0)
+     float absMomPen = sqzMom < 0 and not momDecelBear ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float absSessPen = thinSess and absMomPen > 0 ? 1 : 0
+     if absFlowConf >= 1 + absMomPen + absSessPen
++        v2FlowMask += 16
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "ABSORB"
++            v2RawMask += 16
+             ctLongFiredThisBar := true
+ 
++if useAbsorb and ctShortFiredThisBar
++    v2PrioritySkipped += 1024
+ if useAbsorb and ctGateShort and not ctShortFiredThisBar
++    v2EvalMask += 1024
+     float absFlowConf = (absorbBear ? 1 : 0) + (fpDeltaBear ? 1 : 0) + (deltaFlipBear ? 1 : 0) + (momDecelBull ? 1 : 0)
+     float absMomPen = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float absSessPen = thinSess and absMomPen > 0 ? 1 : 0
+     if absFlowConf >= 1 + absMomPen + absSessPen
++        v2FlowMask += 1024
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "ABSORB"
++            v2RawMask += 1024
+             ctShortFiredThisBar := true
+ 
+ // Priority 6: VRZ RETEST — price returns to institutional volume zone and reacts
+@@ -1655,31 +1752,41 @@
+             vrzRetestRes := true
+             vrzWasAway := false
+ 
++if useVrz and ctLongFiredThisBar
++    v2PrioritySkipped += 32
+ if useVrz and ctGateLong and not ctLongFiredThisBar and vrzRetestSup
++    v2EvalMask += 32
+     // VRZ support retest — price tested institutional zone and held
+     int vrzConf = (bigLowerWick ? 1 : 0) + (deltaFlipBull ? 1 : 0) + (absorbBull ? 1 : 0) + (fpDeltaBull ? 1 : 0) + (momFlipBull ? 1 : 0)
+     float vrzMomPen = sqzMom < 0 and not momDecelBear ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float vrzSessPen = thinSess and vrzMomPen > 0 ? 1 : 0
+     if vrzConf >= f_vrzMinConf() + vrzMomPen + vrzSessPen + ctExtraConfBuy
++        v2FlowMask += 32
+         tpCand = f_ctTpLong()
+         slCand = f_ctSlLong()
+         if (tpCand - close) >= ctMinProfit
+             eaaRawLongSl := slCand
+             eaaRawLongTp := tpCand
+             eaaRawLongKind := "VRZ"
++            v2RawMask += 32
+             ctLongFiredThisBar := true
+ 
++if useVrz and ctShortFiredThisBar
++    v2PrioritySkipped += 2048
+ if useVrz and ctGateShort and not ctShortFiredThisBar and vrzRetestRes
++    v2EvalMask += 2048
+     int vrzConf = (bigUpperWick ? 1 : 0) + (deltaFlipBear ? 1 : 0) + (absorbBear ? 1 : 0) + (fpDeltaBear ? 1 : 0) + (momFlipBear ? 1 : 0)
+     float vrzMomPen = sqzMom > 0 and not momDecelBull ? (momStr > 2.0 ? 2 : momStr > 1.0 ? 1 : 0) : 0
+     float vrzSessPen = thinSess and vrzMomPen > 0 ? 1 : 0
+     if vrzConf >= f_vrzMinConf() + vrzMomPen + vrzSessPen + ctExtraConfSell
++        v2FlowMask += 2048
+         tpCand = f_ctTpShort()
+         slCand = f_ctSlShort()
+         if (close - tpCand) >= ctMinProfit
+             eaaRawShortSl := slCand
+             eaaRawShortTp := tpCand
+             eaaRawShortKind := "VRZ"
++            v2RawMask += 2048
+             ctShortFiredThisBar := true
+ 
+ // ── SMART EXIT — CT-specific ──────────────────────────────────
+@@ -1799,6 +1906,19 @@
+ bool eaaSlotFree = strategy.position_size == 0 and eaaSide == 0 and not eaaClosedNow and not eaaUnfilledNow
+ bool eaaOrderSubmitted = false
+ int eaaSubmittedModel = 0
++// Shared-filter mask: liquidity1/downtrend2/uptrend4/overextL8/overextS16/
++// confidenceL32/confidenceS64/noHiddenVetoL128/noHiddenVetoS256/
++// HTFpassL512/HTFpassS1024/ADXpass2048/enabledL4096/enabledS8192.
++int v2FilterMask = (liquidityOk ? 1 : 0) + (aerDowntrend ? 2 : 0) + (aerUptrend ? 4 : 0) + (ctLongOverextOk ? 8 : 0) + (ctShortOverextOk ? 16 : 0) + (ctConfLong >= f_ctDynMinConf() ? 32 : 0) + (ctConfShort >= f_ctDynMinConf() ? 64 : 0) + (not hidDivBlocksLong ? 128 : 0) + (not hidDivBlocksShort ? 256 : 0) + (htfConfScore > -htfVetoThresh ? 512 : 0) + (htfConfScore < htfVetoThresh ? 1024 : 0) + (adx >= adxMin ? 2048 : 0) + (ctLongsEnabled ? 4096 : 0) + (ctShortsEnabled ? 8192 : 0)
++// Pre-dispatch mask: dates1/session2/time4/data8/slot16/noConflict32/confirmed64.
++// These snapshot values are not recalculated after a submission mutates the slot.
++int v2ExecGates = (eaaInDates ? 1 : 0) + (f_eaaSessionOpen(time_close, 1003) ? 2 : 0) + (eaaTimeOk ? 4 : 0) + (eaaDataOk ? 8 : 0) + (eaaSlotFree ? 16 : 0) + (not eaaConflict ? 32 : 0) + (barstate.isconfirmed ? 64 : 0)
++bool v2LevelsValid = false
++float v2CandidateSl = na
++float v2CandidateTp = na
++string v2HtfSnapshot = '{"mode":"' + (v2ConfirmedHtf ? "CONFIRMED" : "LEGACY") + '","close5_ms":' + f_v2Num(h5KnownClose) + ',"close15_ms":' + f_v2Num(h15KnownClose) + ',"close60_ms":' + f_v2Num(h60KnownClose) + ',"close240_ms":' + f_v2Num(h4KnownClose) + ',"score":' + f_v2Num(htfConfScore) + '}'
++string v2FpSnapshot = '{"present":' + (not na(fp) ? "true" : "false") + ',"streak":' + str.tostring(eaaFootprintStreak) + ',"buy":' + f_v2Num(fpBuyVol) + ',"sell":' + f_v2Num(fpSellVol) + ',"delta":' + f_v2Num(fpDelta) + ',"poc":' + f_v2Num(fpPocMid) + ',"poc_fresh":' + (v2PocFresh ? "true" : "false") + ',"vah":' + f_v2Num(fpVAH) + ',"val":' + f_v2Num(fpVAL) + ',"slope":' + f_v2Num(fpDeltaSlope) + '}'
++
+ 
+ if eaaRawAny and eaaInDates
+     eaaRawSignals += 1
+@@ -1816,7 +1936,7 @@
+         strategy.cancel_all()
+         if strategy.position_size != 0
+             strategy.close_all(comment="SESSION_OR_TEST_END", immediately=true,
+-                 alert_message="EAA_CT_V1|EXIT|SESSION_OR_TEST_END")
++                 alert_message=f_v2Intent("SESSION_OR_TEST_END", v2TradeContext, time_close))
+         // An unfilled market order can only be pending until the next tick.
+         if strategy.position_size == 0
+             eaaSide := 0
+@@ -1828,10 +1948,10 @@
+         // Keep the same immutable absolute bracket; never recalculate from a
+         // later signal or mutate the position to an opposite candidate.
+         if strategy.position_size != 0
+-            strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
+-                 comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
++            strategy.exit(v2BracketId, from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
++                 comment_profit="TP", comment_loss="SL", alert_message=v2BracketPayload, alert_profit=v2TpPayload, alert_loss=v2SlPayload)
+             if (ctInLong and ctPatternExitLong) or (ctInShort and ctPatternExitShort)
+-                strategy.close(eaaEntryId, comment="PAT", alert_message="EAA_CT_V1|EXIT|PAT")
++                strategy.close(eaaEntryId, comment="PAT", alert_message=f_v2Intent("PAT", v2TradeContext, time_close))
+         if eaaRawAny and not eaaConflict and eaaSlotFree and eaaTimeOk and eaaDataOk
+             bool isLongOrder = ctLongFiredThisBar
+             float rawSl = isLongOrder ? eaaRawLongSl : eaaRawShortSl
+@@ -1842,10 +1962,14 @@
+             float finalSl = isLongOrder ? f_eaaTickDown(safeSl) : f_eaaTickUp(safeSl)
+             float finalTp = isLongOrder ? f_eaaTickUp(rawTp) : f_eaaTickDown(rawTp)
+             bool validLevels = not na(finalSl) and not na(finalTp) and atr > 0 and (isLongOrder ? finalSl < close and finalTp > close : finalSl > close and finalTp < close)
++            v2LevelsValid := validLevels
++            v2CandidateSl := finalSl
++            v2CandidateTp := finalTp
+             if validLevels
+                 eaaSide := isLongOrder ? 1 : -1
+                 string kind = isLongOrder ? eaaRawLongKind : eaaRawShortKind
+-                eaaEntryId := (isLongOrder ? "CT_L_" : "CT_S_") + kind
++                eaaEntryId := (isLongOrder ? "CT2_L_" : "CT2_S_") + kind + "_" + str.tostring(time_close)
++                v2BracketId := "CT2_X_" + str.tostring(time_close)
+                 ctActiveSl := finalSl
+                 ctActiveTp := finalTp
+                 ctEntryAtr := atr
+@@ -1854,47 +1978,27 @@
+                 eaaSubmittedBar := bar_index
+                 eaaSawFill := false
+                 eaaTradeAmbiguous := false
+-                eaaStressStop := na
++                v2SignalBarMs := time
++                v2SubmitMs := time_close
++                v2TradeContext := f_v2Context(kind, eaaSide, eaaEntryId, v2BracketId, finalSl, finalTp, v2ExecGates, v2RawMask, v2HtfSnapshot, v2FpSnapshot)
++                v2EntryPayload := f_v2Intent("ENTRY", v2TradeContext, time_close)
++                v2BracketPayload := f_v2Intent("BRACKET", v2TradeContext, time_close)
++                v2TpPayload := f_v2Intent("TP", v2TradeContext, time_close)
++                v2SlPayload := f_v2Intent("SL", v2TradeContext, time_close)
+                 eaaOrderSubmitted := true
+                 eaaSubmittedModel := eaaSide * f_eaaModel(kind)
+                 strategy.cancel_all()
+                 strategy.entry(eaaEntryId, isLongOrder ? strategy.long : strategy.short, qty=eaaContracts,
+                      comment=eaaEntryId + "|SL=" + str.tostring(finalSl, format.mintick) + "|TP=" + str.tostring(finalTp, format.mintick),
+-                     alert_message="EAA_CT_V1|ENTRY|" + eaaEntryId)
++                     alert_message=v2EntryPayload)
+                 // Same calculation as entry: protection is not delayed until a
+                 // later bar-close observes the new position.
+-                strategy.exit("CT_BRACKET", from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
+-                     comment_profit="TP", comment_loss="SL", alert_message="EAA_CT_V1|EXIT|BRACKET")
++                strategy.exit(v2BracketId, from_entry=eaaEntryId, stop=ctActiveSl, limit=ctActiveTp,
++                     comment_profit="TP", comment_loss="SL", alert_message=v2BracketPayload, alert_profit=v2TpPayload, alert_loss=v2SlPayload)
+             else
+                 eaaBlockedLevels += 1
+ 
+-// ── ENTRY / EXIT PLOTSHAPES (matching main indicator style) ───
+-// ── CT INTERNAL SIGNALS (direction + entry triggers) ─────────
+-// Delta divergence — triggers DIV entry path
+-plotshape(fpDivBear, title="Δ DIV Bear", style=shape.arrowdown, location=location.abovebar, color=color.new(color.red, 0), size=size.tiny, text="Δ DIV ▼", textcolor=color.new(color.red, 0), offset=0)
+-plotshape(fpDivBull, title="Δ DIV Bull", style=shape.arrowup,   location=location.belowbar, color=color.new(color.green, 0), size=size.tiny, text="Δ DIV ▲", textcolor=color.new(color.green, 0), offset=0)
+-// RSI divergence — directional exhaustion, feeds confidence + DIV path
+-plotshape(bearDiv, title="RSI DIV Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="RSI ▼", textcolor=color.new(color.red, 0), offset=0)
+-plotshape(bullDiv, title="RSI DIV Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="RSI ▲", textcolor=color.new(color.green, 0), offset=0)
+-// Absorption — triggers ABSORB entry path (institutional limit orders soaking flow)
+-plotshape(absorbBull and ctLongOverextOk, title="Absorb Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="ABS ▲", textcolor=color.new(color.green, 0))
+-plotshape(absorbBear and ctShortOverextOk, title="Absorb Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="ABS ▼", textcolor=color.new(color.red, 0))
+-// VRZ retest — institutional zone reaction (direction + entry)
+-plotshape(vrzRetestSup and ctLongOverextOk and ctConfLong >= f_ctDynMinConf(), title="VRZ Sup Retest", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="VRZ ▲", textcolor=color.new(color.green, 0))
+-plotshape(vrzRetestRes and ctShortOverextOk and ctConfShort >= f_ctDynMinConf(), title="VRZ Res Retest", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="VRZ ▼", textcolor=color.new(color.red, 0))
+-// Sweep — triggers TRAP entry path (liquidity grab + rejection)
+-plotshape(bearSweep and ctLongOverextOk and ctConfLong >= f_ctDynMinConf(), title="Bear Sweep (CT Buy)", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="SWP ▲", textcolor=color.new(color.green, 0))
+-plotshape(bullSweep and ctShortOverextOk and ctConfShort >= f_ctDynMinConf(), title="Bull Sweep (CT Sell)", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="SWP ▼", textcolor=color.new(color.red, 0))
+-plotshape(chochBull and not chochBull[1] and relVol >= 0.8 and not inAsia, title="CHoCH Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="CHoCH ▲", textcolor=color.new(color.green, 0))
+-plotshape(chochBear and not chochBear[1] and relVol >= 0.8 and not inAsia, title="CHoCH Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="CHoCH ▼", textcolor=color.new(color.red, 0))
+-plotshape(smtBull and not smtBull[1] and relVol >= 0.8 and not inAsia, title="SMT Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="SMT ▲", textcolor=color.new(color.green, 0))
+-plotshape(smtBear and not smtBear[1] and relVol >= 0.8 and not inAsia, title="SMT Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="SMT ▼", textcolor=color.new(color.red, 0))
+-plotshape(sqzFired and sqzMom > 0, title="Squeeze Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="SQZ ▲", textcolor=color.new(color.green, 0))
+-plotshape(sqzFired and sqzMom < 0, title="Squeeze Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="SQZ ▼", textcolor=color.new(color.red, 0))
+-// momFlip visual — raised threshold: only show when flip has magnitude + volume (internal bool fires on every flip for scoring)
+-plotshape(momFlipBull and math.abs(sqzMom) > 1.0 and relVol >= 0.8 and not inAsia, title="Mom Flip Bull", style=shape.diamond, location=location.belowbar, color=color.new(color.green, 100), size=size.small, text="MOM ▲", textcolor=color.new(color.green, 0))
+-plotshape(momFlipBear and math.abs(sqzMom) > 1.0 and relVol >= 0.8 and not inAsia, title="Mom Flip Bear", style=shape.diamond, location=location.abovebar, color=color.new(color.red, 100), size=size.small, text="MOM ▼", textcolor=color.new(color.red, 0))
+-
++// Internal-pattern shapes removed: they were not orders or fills.
+ // ── DASHBOARD ─────────────────────────────────────────────────
+ if showDashboard and barstate.islast
+     var table ctDash = table.new(position.bottom_center, 1, 3, bgcolor=color.new(color.black, 60), border_width=1, border_color=color.new(color.gray, 70))
+@@ -1912,38 +2016,86 @@
+     table.cell(ctDash, 0, 1, confStr,    text_color=confCol,   text_size=size.normal)
+     table.cell(ctDash, 0, 2, overextStr, text_color=overextCol, text_size=size.normal)
+ 
+-// ── EAA DIAGNOSTICS / EXPORT FIELDS ────────────────────────────
+-// TV native orders are the sole execution book. The stress ledger uses the same
+-// accepted trades, repriced adversely; it is NOT an alternate strategy replay,
+-// an intraday equity curve, a funded simulation, or a guaranteed performance bound.
+-plot(eaaAuditSl, "EAA audit SL", display=display.data_window)
+-plot(eaaAuditTp, "EAA audit TP", display=display.data_window)
+-plot(eaaAuditSide, "EAA audit side", display=display.data_window)
+-plot(eaaBothNow ? 1 : 0, "EAA both levels in bar", display=display.data_window)
+-plot(eaaClosedNativeNet, "EAA closed native net", display=display.data_window)
+-plot(eaaClosedStressNet, "EAA closed stress net", display=display.data_window)
+-plot(eaaClosedAmbiguous, "EAA closed ambiguous", display=display.data_window)
+-plot(eaaClosedExitTime, "EAA closed exit time ms", display=display.data_window)
+-plot(eaaStressNet, "EAA cumulative stress net", display=display.data_window)
+-plot(eaaSubmittedModel, "EAA submitted model 1-6 signed", display=display.data_window)
+-plot(ctLongFiredThisBar ? f_eaaModel(eaaRawLongKind) : ctShortFiredThisBar ? -f_eaaModel(eaaRawShortKind) : 0, "EAA raw model 1-6 signed", display=display.data_window)
+-plot(not na(fp) ? 1 : 0, "EAA footprint present", display=display.data_window)
+-plot(strategy.closedtrades, "EAA closed trade count", display=display.data_window)
+-plot(eaaSide != 0 ? ctActiveSl : na, "EAA active SL", color=color.red, style=plot.style_linebr)
+-plot(eaaSide != 0 ? ctActiveTp : na, "EAA active TP", color=color.green, style=plot.style_linebr)
++// Diagnostic-only events. Never count these as fills, trades, or funded PnL.
++// Mask bits: long FADE=1,DIV=2,TRAP=4,AGG=8,ABSORB=16,VRZ=32; short=long*64.
++// Raw=winning candidate after original model priority and TP-distance gate.
++// Eval/flow/skipped reveal reachability, not counterfactual skipped signals.
++// Block reason: 0 no raw,1 unconfirmed,2 dates,3 conflict,4 busy,5 time,6 FP,
++// 7 invalid levels,8 submitted. Force-flat has precedence over entry dispatch.
++int v2BlockReason = not eaaRawAny ? 0 : not barstate.isconfirmed ? 1 : not eaaInDates ? 2 : eaaConflict ? 3 : not eaaSlotFree ? 4 : not eaaTimeOk ? 5 : not eaaDataOk ? 6 : not v2LevelsValid ? 7 : eaaOrderSubmitted ? 8 : 9
++bool v2TraceNow = barstate.isconfirmed and eaaInDates and (v2TraceAllBars or eaaRawAny or eaaOrderSubmitted or v2ObserveEntry or eaaClosedNow or eaaUnfilledNow)
++if v2TraceNow and (v2PineLogs or v2DiagAlerts)
++    string diagnostic = '{"event":"DIAGNOSTIC_NOT_A_TRADE","version":"' + v2Version + '","bar_ms":' + str.tostring(time) + ',"close_ms":' + str.tostring(time_close) + ',"realtime":' + (barstate.isrealtime ? "true" : "false") + ',"calc_in_bar":' + str.tostring(v2CalcInBar) + ',"eval_mask":' + str.tostring(v2EvalMask) + ',"flow_mask":' + str.tostring(v2FlowMask) + ',"raw_mask":' + str.tostring(v2RawMask) + ',"priority_skipped":' + str.tostring(v2PrioritySkipped) + ',"filter_mask":' + str.tostring(v2FilterMask) + ',"exec_gates":' + str.tostring(v2ExecGates) + ',"block_reason":' + str.tostring(v2BlockReason) + ',"fp_present":' + (not na(fp) ? "true" : "false") + ',"fp_streak":' + str.tostring(eaaFootprintStreak) + ',"fp_buy":' + f_v2Num(fpBuyVol) + ',"fp_sell":' + f_v2Num(fpSellVol) + ',"fp_delta":' + f_v2Num(fpDelta) + ',"poc":' + f_v2Num(fpPocMid) + ',"poc_fresh":' + (v2PocFresh ? "true" : "false") + ',"vah":' + f_v2Num(fpVAH) + ',"val":' + f_v2Num(fpVAL) + ',"fp_slope":' + f_v2Num(fpDeltaSlope) + ',"htf":' + v2HtfSnapshot + ',"candidate_sl":' + f_v2Num(v2CandidateSl) + ',"candidate_tp":' + f_v2Num(v2CandidateTp) + ',"submitted":' + (eaaOrderSubmitted ? "true" : "false") + ',"native_position":' + f_v2Num(strategy.position_size) + ',"native_closed_count":' + str.tostring(strategy.closedtrades) + '}'
++    if v2PineLogs
++        log.info(diagnostic)
++    if v2DiagAlerts and barstate.isrealtime
++        alert(diagnostic, alert.freq_once_per_bar_close)
++
++// Export chart data with these fields; chart data is not Deep Backtesting telemetry.
++// Constant colors => one plot count per field; SuperTrend above uses two.
++plot(v2EvalMask, "QA eval mask", display=display.data_window)
++plot(v2FlowMask, "QA flow mask", display=display.data_window)
++plot(v2RawMask, "QA raw mask", display=display.data_window)
++plot(v2PrioritySkipped, "QA priority skipped mask", display=display.data_window)
++plot(v2FilterMask, "QA shared filter mask", display=display.data_window)
++plot(v2ExecGates, "QA exec gate mask", display=display.data_window)
++plot(v2BlockReason, "QA block reason", display=display.data_window)
++plot(not na(fp) ? 1 : 0, "QA fp present", display=display.data_window)
++plot(eaaFootprintStreak, "QA fp streak", display=display.data_window)
++plot(v2PocFresh ? 1 : 0, "QA poc fresh", display=display.data_window)
++plot(fpBuyVol, "QA fp buy", display=display.data_window)
++plot(fpSellVol, "QA fp sell", display=display.data_window)
++plot(fpDelta, "QA fp delta", display=display.data_window)
++plot(fpTotalVol, "QA fp total", display=display.data_window)
++plot(fpPocMid, "QA fp poc", display=display.data_window)
++plot(fpVAH, "QA fp vah", display=display.data_window)
++plot(fpVAL, "QA fp val", display=display.data_window)
++plot(cumFpDelta, "QA cum delta", display=display.data_window)
++plot(fpDeltaSlope, "QA delta slope", display=display.data_window)
++plot(time > time_close[1] ? 1 : 0, "QA time gap", display=display.data_window)
++plot(h5KnownClose, "QA HTF5 close ms", display=display.data_window)
++plot(h15KnownClose, "QA HTF15 close ms", display=display.data_window)
++plot(h60KnownClose, "QA HTF60 close ms", display=display.data_window)
++plot(h4KnownClose, "QA HTF240 close ms", display=display.data_window)
++plot(htfConfScore, "QA HTF score", display=display.data_window)
++plot(v2HtfReady ? 1 : 0, "QA HTF ready", display=display.data_window)
++plot(eaaSubmittedModel, "QA submitted model signed", display=display.data_window)
++plot(eaaOrderSubmitted ? ctActiveSl : na, "QA submit SL", display=display.data_window)
++plot(eaaOrderSubmitted ? ctActiveTp : na, "QA submit TP", display=display.data_window)
++plot(eaaOrderSubmitted ? v2SubmitMs : na, "QA submit ms", display=display.data_window)
++plot(v2EntryTimeObserved, "QA native entry ms", display=display.data_window)
++plot(v2EntryPriceObserved, "QA native entry price", display=display.data_window)
++plot(eaaClosedExitTime, "QA native exit ms", display=display.data_window)
++plot(v2ExitPriceObserved, "QA native exit price", display=display.data_window)
++plot(v2ExitReason, "QA native exit reason", display=display.data_window)
++plot(eaaClosedNativeNet, "QA native closed net", display=display.data_window)
++plot(strategy.closedtrades, "QA native closed count", display=display.data_window)
++plot(v2ActualQty, "QA native observed qty", display=display.data_window)
++plot(eaaAuditSl, "QA exposure SL", display=display.data_window)
++plot(eaaAuditTp, "QA exposure TP", display=display.data_window)
++plot(eaaBothNow ? 1 : 0, "QA both levels in bar", display=display.data_window)
++plot(eaaAuditSide, "QA exposure side", display=display.data_window)
++plot(eaaSide != 0 ? ctActiveSl : na, "V2 active frozen SL", color=color.red, style=plot.style_linebr)
++plot(eaaSide != 0 ? ctActiveTp : na, "V2 active frozen TP", color=color.green, style=plot.style_linebr)
++plot(ctConfLong, "QA confidence long", display=display.data_window)
++plot(ctConfShort, "QA confidence short", display=display.data_window)
++plot(atr, "QA ATR", display=display.data_window)
++plot(v2CalcInBar, "QA calculations in bar", display=display.data_window)
++plot(barstate.isrealtime ? 1 : 0, "QA realtime", display=display.data_window)
++plot(eaaRawLongSl, "QA raw long SL", display=display.data_window)
++plot(eaaRawLongTp, "QA raw long TP", display=display.data_window)
++plot(eaaRawShortSl, "QA raw short SL", display=display.data_window)
++plot(eaaRawShortTp, "QA raw short TP", display=display.data_window)
++plot(v2CandidateSl, "QA candidate final SL", display=display.data_window)
++plot(v2CandidateTp, "QA candidate final TP", display=display.data_window)
++plot(strategy.position_size, "QA native position", display=display.data_window)
+ 
+ if barstate.islast
+-    var table eaaQa = table.new(position.top_right, 1, 9, bgcolor=color.new(color.black, 15))
+-    table.cell(eaaQa, 0, 0, "EAA CT V1 | RESEARCH / HTF repaint risk", text_color=color.orange, text_size=size.small)
+-    table.cell(eaaQa, 0, 1, "Closed/audited " + str.tostring(strategy.closedtrades) + "/" + str.tostring(eaaAuditedTrades) + " | same-bar " + str.tostring(eaaSameBarTrades), text_color=color.white, text_size=size.small)
+-    table.cell(eaaQa, 0, 2, "Ambiguous trades " + str.tostring(eaaAmbiguousTrades) + " | gap entries " + str.tostring(eaaGapEntries), text_color=color.yellow, text_size=size.small)
+-    table.cell(eaaQa, 0, 3, "Stop-first stress net " + str.tostring(eaaStressNet, "#.##") + " USD", text_color=color.white, text_size=size.small)
+-    table.cell(eaaQa, 0, 4, "Missing FP bars " + str.tostring(eaaMissingFpBars) + " | data blocks " + str.tostring(eaaBlockedData), text_color=color.yellow, text_size=size.small)
+-    table.cell(eaaQa, 0, 5, "Raw " + str.tostring(eaaRawSignals) + " | busy blocks " + str.tostring(eaaBlockedBusy), text_color=color.white, text_size=size.small)
+-    table.cell(eaaQa, 0, 6, "Time blocks " + str.tostring(eaaBlockedTime) + " | level blocks " + str.tostring(eaaBlockedLevels), text_color=color.white, text_size=size.small)
+-    table.cell(eaaQa, 0, 7, "Gaps " + str.tostring(eaaExposureGaps) + " | conflicts " + str.tostring(eaaConflicts) + " | unfilled " + str.tostring(eaaUnfilledOrders), text_color=color.yellow, text_size=size.small)
+-    table.cell(eaaQa, 0, 8, "Smart exits disabled IN ORIGINAL | no live approval", text_color=color.orange, text_size=size.small)
+-
+-// Use strategy ORDER-FILL alerts for actual simulated fills. Original indicator
+-// alert()/alertcondition() tickets were removed to avoid false/duplicate orders.
+-// Messages are diagnostic identifiers, NOT a configured Tradovate webhook.
++    var table v2Qa = table.new(position.top_right, 1, 7, bgcolor=color.new(color.black, 15))
++    table.cell(v2Qa, 0, 0, v2Version + " | RESEARCH / NO PROMOTION", text_color=color.orange, text_size=size.small)
++    table.cell(v2Qa, 0, 1, "HTF " + (v2ConfirmedHtf ? "CONFIRMED" : "LEGACY REPAINT RISK") + " | calls/bar " + str.tostring(v2CalcInBar), text_color=color.white, text_size=size.small)
++    table.cell(v2Qa, 0, 2, "Native closed " + str.tostring(strategy.closedtrades) + " | native net " + str.tostring(strategy.netprofit, "#.##"), text_color=color.white, text_size=size.small)
++    table.cell(v2Qa, 0, 3, "FP streak " + str.tostring(eaaFootprintStreak) + " | quality/resolution UNKNOWN", text_color=color.yellow, text_size=size.small)
++    table.cell(v2Qa, 0, 4, "Raw mask " + str.tostring(v2RawMask) + " | block " + str.tostring(v2BlockReason) + " | both-level trades " + str.tostring(eaaAmbiguousTrades), text_color=color.white, text_size=size.small)
++    table.cell(v2Qa, 0, 5, "Date gate " + (eaaInDates ? "OPEN" : "CLOSED: inspect test dates") + " | no holiday guarantee", text_color=color.orange, text_size=size.small)
++    table.cell(v2Qa, 0, 6, "Native fill alerts only = trades. Diag/submit/shape are not fills.", text_color=color.white, text_size=size.small)

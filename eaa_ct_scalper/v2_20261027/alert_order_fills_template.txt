@@ -1,0 +1,1 @@
+{"event":"ORDER_FILL","tv_time_utc":"{{timenow}}","ticker":"{{ticker}}","tv_order_id":"{{strategy.order.id}}","action":"{{strategy.order.action}}","contracts":{{strategy.order.contracts}},"fill_price":{{strategy.order.price}},"position_size":{{strategy.position_size}},"comment":"{{strategy.order.comment}}","intent":{{strategy.order.alert_message}}}

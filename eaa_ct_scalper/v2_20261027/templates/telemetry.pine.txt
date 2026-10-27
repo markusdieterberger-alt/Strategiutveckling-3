@@ -1,0 +1,83 @@
+// Diagnostic-only events. Never count these as fills, trades, or funded PnL.
+// Mask bits: long FADE=1,DIV=2,TRAP=4,AGG=8,ABSORB=16,VRZ=32; short=long*64.
+// Raw=winning candidate after original model priority and TP-distance gate.
+// Eval/flow/skipped reveal reachability, not counterfactual skipped signals.
+// Block reason: 0 no raw,1 unconfirmed,2 dates,3 conflict,4 busy,5 time,6 FP,
+// 7 invalid levels,8 submitted. Force-flat has precedence over entry dispatch.
+int v2BlockReason = not eaaRawAny ? 0 : not barstate.isconfirmed ? 1 : not eaaInDates ? 2 : eaaConflict ? 3 : not eaaSlotFree ? 4 : not eaaTimeOk ? 5 : not eaaDataOk ? 6 : not v2LevelsValid ? 7 : eaaOrderSubmitted ? 8 : 9
+bool v2TraceNow = barstate.isconfirmed and eaaInDates and (v2TraceAllBars or eaaRawAny or eaaOrderSubmitted or v2ObserveEntry or eaaClosedNow or eaaUnfilledNow)
+if v2TraceNow and (v2PineLogs or v2DiagAlerts)
+    string diagnostic = '{"event":"DIAGNOSTIC_NOT_A_TRADE","version":"' + v2Version + '","bar_ms":' + str.tostring(time) + ',"close_ms":' + str.tostring(time_close) + ',"realtime":' + (barstate.isrealtime ? "true" : "false") + ',"calc_in_bar":' + str.tostring(v2CalcInBar) + ',"eval_mask":' + str.tostring(v2EvalMask) + ',"flow_mask":' + str.tostring(v2FlowMask) + ',"raw_mask":' + str.tostring(v2RawMask) + ',"priority_skipped":' + str.tostring(v2PrioritySkipped) + ',"filter_mask":' + str.tostring(v2FilterMask) + ',"exec_gates":' + str.tostring(v2ExecGates) + ',"block_reason":' + str.tostring(v2BlockReason) + ',"fp_present":' + (not na(fp) ? "true" : "false") + ',"fp_streak":' + str.tostring(eaaFootprintStreak) + ',"fp_buy":' + f_v2Num(fpBuyVol) + ',"fp_sell":' + f_v2Num(fpSellVol) + ',"fp_delta":' + f_v2Num(fpDelta) + ',"poc":' + f_v2Num(fpPocMid) + ',"poc_fresh":' + (v2PocFresh ? "true" : "false") + ',"vah":' + f_v2Num(fpVAH) + ',"val":' + f_v2Num(fpVAL) + ',"fp_slope":' + f_v2Num(fpDeltaSlope) + ',"htf":' + v2HtfSnapshot + ',"candidate_sl":' + f_v2Num(v2CandidateSl) + ',"candidate_tp":' + f_v2Num(v2CandidateTp) + ',"submitted":' + (eaaOrderSubmitted ? "true" : "false") + ',"native_position":' + f_v2Num(strategy.position_size) + ',"native_closed_count":' + str.tostring(strategy.closedtrades) + '}'
+    if v2PineLogs
+        log.info(diagnostic)
+    if v2DiagAlerts and barstate.isrealtime
+        alert(diagnostic, alert.freq_once_per_bar_close)
+
+// Export chart data with these fields; chart data is not Deep Backtesting telemetry.
+// Constant colors => one plot count per field; SuperTrend above uses two.
+plot(v2EvalMask, "QA eval mask", display=display.data_window)
+plot(v2FlowMask, "QA flow mask", display=display.data_window)
+plot(v2RawMask, "QA raw mask", display=display.data_window)
+plot(v2PrioritySkipped, "QA priority skipped mask", display=display.data_window)
+plot(v2FilterMask, "QA shared filter mask", display=display.data_window)
+plot(v2ExecGates, "QA exec gate mask", display=display.data_window)
+plot(v2BlockReason, "QA block reason", display=display.data_window)
+plot(not na(fp) ? 1 : 0, "QA fp present", display=display.data_window)
+plot(eaaFootprintStreak, "QA fp streak", display=display.data_window)
+plot(v2PocFresh ? 1 : 0, "QA poc fresh", display=display.data_window)
+plot(fpBuyVol, "QA fp buy", display=display.data_window)
+plot(fpSellVol, "QA fp sell", display=display.data_window)
+plot(fpDelta, "QA fp delta", display=display.data_window)
+plot(fpTotalVol, "QA fp total", display=display.data_window)
+plot(fpPocMid, "QA fp poc", display=display.data_window)
+plot(fpVAH, "QA fp vah", display=display.data_window)
+plot(fpVAL, "QA fp val", display=display.data_window)
+plot(cumFpDelta, "QA cum delta", display=display.data_window)
+plot(fpDeltaSlope, "QA delta slope", display=display.data_window)
+plot(time > time_close[1] ? 1 : 0, "QA time gap", display=display.data_window)
+plot(h5KnownClose, "QA HTF5 close ms", display=display.data_window)
+plot(h15KnownClose, "QA HTF15 close ms", display=display.data_window)
+plot(h60KnownClose, "QA HTF60 close ms", display=display.data_window)
+plot(h4KnownClose, "QA HTF240 close ms", display=display.data_window)
+plot(htfConfScore, "QA HTF score", display=display.data_window)
+plot(v2HtfReady ? 1 : 0, "QA HTF ready", display=display.data_window)
+plot(eaaSubmittedModel, "QA submitted model signed", display=display.data_window)
+plot(eaaOrderSubmitted ? ctActiveSl : na, "QA submit SL", display=display.data_window)
+plot(eaaOrderSubmitted ? ctActiveTp : na, "QA submit TP", display=display.data_window)
+plot(eaaOrderSubmitted ? v2SubmitMs : na, "QA submit ms", display=display.data_window)
+plot(v2EntryTimeObserved, "QA native entry ms", display=display.data_window)
+plot(v2EntryPriceObserved, "QA native entry price", display=display.data_window)
+plot(eaaClosedExitTime, "QA native exit ms", display=display.data_window)
+plot(v2ExitPriceObserved, "QA native exit price", display=display.data_window)
+plot(v2ExitReason, "QA native exit reason", display=display.data_window)
+plot(eaaClosedNativeNet, "QA native closed net", display=display.data_window)
+plot(strategy.closedtrades, "QA native closed count", display=display.data_window)
+plot(v2ActualQty, "QA native observed qty", display=display.data_window)
+plot(eaaAuditSl, "QA exposure SL", display=display.data_window)
+plot(eaaAuditTp, "QA exposure TP", display=display.data_window)
+plot(eaaBothNow ? 1 : 0, "QA both levels in bar", display=display.data_window)
+plot(eaaAuditSide, "QA exposure side", display=display.data_window)
+plot(eaaSide != 0 ? ctActiveSl : na, "V2 active frozen SL", color=color.red, style=plot.style_linebr)
+plot(eaaSide != 0 ? ctActiveTp : na, "V2 active frozen TP", color=color.green, style=plot.style_linebr)
+plot(ctConfLong, "QA confidence long", display=display.data_window)
+plot(ctConfShort, "QA confidence short", display=display.data_window)
+plot(atr, "QA ATR", display=display.data_window)
+plot(v2CalcInBar, "QA calculations in bar", display=display.data_window)
+plot(barstate.isrealtime ? 1 : 0, "QA realtime", display=display.data_window)
+plot(eaaRawLongSl, "QA raw long SL", display=display.data_window)
+plot(eaaRawLongTp, "QA raw long TP", display=display.data_window)
+plot(eaaRawShortSl, "QA raw short SL", display=display.data_window)
+plot(eaaRawShortTp, "QA raw short TP", display=display.data_window)
+plot(v2CandidateSl, "QA candidate final SL", display=display.data_window)
+plot(v2CandidateTp, "QA candidate final TP", display=display.data_window)
+plot(strategy.position_size, "QA native position", display=display.data_window)
+
+if barstate.islast
+    var table v2Qa = table.new(position.top_right, 1, 7, bgcolor=color.new(color.black, 15))
+    table.cell(v2Qa, 0, 0, v2Version + " | RESEARCH / NO PROMOTION", text_color=color.orange, text_size=size.small)
+    table.cell(v2Qa, 0, 1, "HTF " + (v2ConfirmedHtf ? "CONFIRMED" : "LEGACY REPAINT RISK") + " | calls/bar " + str.tostring(v2CalcInBar), text_color=color.white, text_size=size.small)
+    table.cell(v2Qa, 0, 2, "Native closed " + str.tostring(strategy.closedtrades) + " | native net " + str.tostring(strategy.netprofit, "#.##"), text_color=color.white, text_size=size.small)
+    table.cell(v2Qa, 0, 3, "FP streak " + str.tostring(eaaFootprintStreak) + " | quality/resolution UNKNOWN", text_color=color.yellow, text_size=size.small)
+    table.cell(v2Qa, 0, 4, "Raw mask " + str.tostring(v2RawMask) + " | block " + str.tostring(v2BlockReason) + " | both-level trades " + str.tostring(eaaAmbiguousTrades), text_color=color.white, text_size=size.small)
+    table.cell(v2Qa, 0, 5, "Date gate " + (eaaInDates ? "OPEN" : "CLOSED: inspect test dates") + " | no holiday guarantee", text_color=color.orange, text_size=size.small)
+    table.cell(v2Qa, 0, 6, "Native fill alerts only = trades. Diag/submit/shape are not fills.", text_color=color.white, text_size=size.small)

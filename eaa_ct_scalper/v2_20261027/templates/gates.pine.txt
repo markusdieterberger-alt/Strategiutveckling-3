@@ -1,0 +1,12 @@
+// Shared-filter mask: liquidity1/downtrend2/uptrend4/overextL8/overextS16/
+// confidenceL32/confidenceS64/noHiddenVetoL128/noHiddenVetoS256/
+// HTFpassL512/HTFpassS1024/ADXpass2048/enabledL4096/enabledS8192.
+int v2FilterMask = (liquidityOk ? 1 : 0) + (aerDowntrend ? 2 : 0) + (aerUptrend ? 4 : 0) + (ctLongOverextOk ? 8 : 0) + (ctShortOverextOk ? 16 : 0) + (ctConfLong >= f_ctDynMinConf() ? 32 : 0) + (ctConfShort >= f_ctDynMinConf() ? 64 : 0) + (not hidDivBlocksLong ? 128 : 0) + (not hidDivBlocksShort ? 256 : 0) + (htfConfScore > -htfVetoThresh ? 512 : 0) + (htfConfScore < htfVetoThresh ? 1024 : 0) + (adx >= adxMin ? 2048 : 0) + (ctLongsEnabled ? 4096 : 0) + (ctShortsEnabled ? 8192 : 0)
+// Pre-dispatch mask: dates1/session2/time4/data8/slot16/noConflict32/confirmed64.
+// These snapshot values are not recalculated after a submission mutates the slot.
+int v2ExecGates = (eaaInDates ? 1 : 0) + (f_eaaSessionOpen(time_close, 1003) ? 2 : 0) + (eaaTimeOk ? 4 : 0) + (eaaDataOk ? 8 : 0) + (eaaSlotFree ? 16 : 0) + (not eaaConflict ? 32 : 0) + (barstate.isconfirmed ? 64 : 0)
+bool v2LevelsValid = false
+float v2CandidateSl = na
+float v2CandidateTp = na
+string v2HtfSnapshot = '{"mode":"' + (v2ConfirmedHtf ? "CONFIRMED" : "LEGACY") + '","close5_ms":' + f_v2Num(h5KnownClose) + ',"close15_ms":' + f_v2Num(h15KnownClose) + ',"close60_ms":' + f_v2Num(h60KnownClose) + ',"close240_ms":' + f_v2Num(h4KnownClose) + ',"score":' + f_v2Num(htfConfScore) + '}'
+string v2FpSnapshot = '{"present":' + (not na(fp) ? "true" : "false") + ',"streak":' + str.tostring(eaaFootprintStreak) + ',"buy":' + f_v2Num(fpBuyVol) + ',"sell":' + f_v2Num(fpSellVol) + ',"delta":' + f_v2Num(fpDelta) + ',"poc":' + f_v2Num(fpPocMid) + ',"poc_fresh":' + (v2PocFresh ? "true" : "false") + ',"vah":' + f_v2Num(fpVAH) + ',"val":' + f_v2Num(fpVAL) + ',"slope":' + f_v2Num(fpDeltaSlope) + '}'

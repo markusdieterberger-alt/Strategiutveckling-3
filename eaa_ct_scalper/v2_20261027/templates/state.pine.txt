@@ -1,0 +1,8 @@
+var string v2BracketId = ""
+var string v2TradeContext = "null"
+var string v2EntryPayload = "null"
+var string v2BracketPayload = "null"
+var string v2TpPayload = "null"
+var string v2SlPayload = "null"
+var int v2SignalBarMs = na
+var int v2SubmitMs = na

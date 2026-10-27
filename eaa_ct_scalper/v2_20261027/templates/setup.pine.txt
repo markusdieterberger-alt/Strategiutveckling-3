@@ -1,0 +1,29 @@
+// QA instrumentation. These inputs do not change CT signal thresholds.
+string v2Version = "__VERSION__"
+string v2Group = "V2 - QA only, no live approval"
+bool v2PineLogs = input.bool(false, "Pine Logs: diagnostic decisions and native observations", group=v2Group)
+bool v2DiagAlerts = input.bool(false, "Separate diagnostic alert() events - NOT trades", group=v2Group)
+bool v2TraceAllBars = input.bool(false, "Trace every bar inside test dates (otherwise candidates/events)", group=v2Group)
+varip int v2CalcBar = na
+varip int v2CalcInBar = 0
+if na(v2CalcBar) or v2CalcBar != bar_index
+    v2CalcBar := bar_index
+    v2CalcInBar := 1
+else
+    v2CalcInBar += 1
+
+f_v2Num(float x) => na(x) ? "null" : str.tostring(x, "#.########")
+// All string fields below are fixed code literals, model IDs or chart ticker IDs.
+// No free-text input is interpolated into JSON. Fill values exist only in the outer TV template.
+f_v2Context(string model, int side, string entryId, string bracketId, float sl, float tp, int gates, int rawMask, string htfSnapshot, string fpSnapshot) =>
+    '{"version":"' + v2Version + '","model":"' + model + '","side":' + str.tostring(side) +
+     ',"entry_order_id":"' + entryId + '","bracket_order_id":"' + bracketId + '","ticker":"' + syminfo.tickerid +
+     '","signal_bar_ms":' + str.tostring(time) + ',"signal_close_ms":' + str.tostring(time_close) +
+     ',"signal_close":' + f_v2Num(close) + ',"intended_qty":' + str.tostring(eaaContracts) +
+     ',"intended_sl":' + f_v2Num(sl) + ',"intended_tp":' + f_v2Num(tp) +
+     ',"test_start_ms":' + str.tostring(eaaStart) + ',"test_end_ms":' + str.tostring(eaaEnd) +
+     ',"fp_guard":' + (eaaRequireFp ? "true" : "false") + ',"exec_gates":' + str.tostring(gates) +
+     ',"raw_mask":' + str.tostring(rawMask) + ',"htf":' + htfSnapshot + ',"footprint":' + fpSnapshot + '}'
+
+f_v2Intent(string phase, string context, int createdMs) =>
+    '{"phase":"' + phase + '","order_created_ms":' + str.tostring(createdMs) + ',"context":' + context + '}'
