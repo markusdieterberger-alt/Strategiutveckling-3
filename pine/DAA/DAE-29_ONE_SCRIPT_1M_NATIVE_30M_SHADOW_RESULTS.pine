@@ -570,10 +570,10 @@ var array<float> l30 = array.new_float()
 var array<float> c30 = array.new_float()
 
 // Rolling 1m cache holds creator candle minutes before setup is confirmed.
-var array<int> cacheT = array.new_int()
-var array<float> cacheH = array.new_float()
-var array<float> cacheL = array.new_float()
-var array<float> cacheV = array.new_float()
+var array<int> shadowCacheT = array.new_int()
+var array<float> shadowCacheH = array.new_float()
+var array<float> shadowCacheL = array.new_float()
+var array<float> shadowCacheV = array.new_float()
 var array<float> pH = array.new_float()
 var array<float> pL = array.new_float()
 var array<float> pV = array.new_float()
@@ -745,11 +745,11 @@ if barstate.isconfirmed and shadowRun
                         array.clear(pL)
                         array.clear(pV)
                         int startCreator = int((bucket) * 1800000)
-                        for j = 0 to array.size(cacheT) - 1
-                            if array.get(cacheT, j) >= startCreator
-                                array.push(pH, array.get(cacheH, j))
-                                array.push(pL, array.get(cacheL, j))
-                                array.push(pV, array.get(cacheV, j))
+                        for j = 0 to array.size(shadowCacheT) - 1
+                            if array.get(shadowCacheT, j) >= startCreator
+                                array.push(pH, array.get(shadowCacheH, j))
+                                array.push(pL, array.get(shadowCacheL, j))
+                                array.push(pV, array.get(shadowCacheV, j))
                         active := true
                         bullishGap := fvgUp
                         direction := sweepUp and not sweepDn ? 1 : sweepDn and not sweepUp ? -1 : 0
@@ -774,15 +774,15 @@ if barstate.isconfirmed and shadowRun
                 aggC := cc
 
             // Keep creator candle data before it leaves the cache.
-            array.push(cacheT, tt)
-            array.push(cacheH, hh)
-            array.push(cacheL, ll)
-            array.push(cacheV, vv)
-            if array.size(cacheT) > 120
-                array.shift(cacheT)
-                array.shift(cacheH)
-                array.shift(cacheL)
-                array.shift(cacheV)
+            array.push(shadowCacheT, tt)
+            array.push(shadowCacheH, hh)
+            array.push(shadowCacheL, ll)
+            array.push(shadowCacheV, vv)
+            if array.size(shadowCacheT) > 120
+                array.shift(shadowCacheT)
+                array.shift(shadowCacheH)
+                array.shift(shadowCacheL)
+                array.shift(shadowCacheV)
 
             if active
                 array.push(pH, hh)
