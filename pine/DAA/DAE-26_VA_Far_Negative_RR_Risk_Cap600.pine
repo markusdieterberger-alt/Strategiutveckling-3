@@ -1,3 +1,4 @@
+//@version=6
 strategy("DAE-26 | VA Far + Setups TP SL + Negative RR 600", overlay=true, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_boxes_count=500, max_labels_count=500, max_lines_count=300)
 lookbackHours = input.int(1000, "Lookback (completed 30m bars)", minval=3, maxval=5000)
 maxZones = input.int(400, "Maximum visible zones", minval=1, maxval=490)
