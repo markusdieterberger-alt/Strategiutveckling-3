@@ -1,0 +1,344 @@
+//@version=6
+indicator("DAE-27 | 1m Engine Viewer on 1m/5m/30m (SHADOW QA)", overlay=true, max_labels_count=500)
+
+// DAE-27 DISPLAY-ONLY deterministic 1m OHLCV replay, NOT native strategy fills.
+// Always processes chronologically ordered 1-minute candles, regardless of chart TF.
+// Uses 30m candles built from completed 1m OHLCV; no HTF future lookahead.
+// Same FVG+CRT adjacency, dynamic OHLCV-volume proxy, VA Far / POC / VA Close,
+// fixed FVG TP, RR-derived initial SL and dollar cap as DAE-26.
+// Synthetic 1m O/H/L order fill approximation: stop-first on intrabar ambiguity.
+// Gaps and slippage can exceed the configured risk cap. Realtime TV native
+// broker emulator fills are not guaranteed to match this shadow simulator.
+// On 5m/30m, new markers appear only after the containing chart bar closes.
+// DO NOT treat dashboard as the official strategy tester or funded evidence.
+
+groupEngine = "DAE-27 1m Shadow Engine"
+entryLevel = input.string("VA Far", "Entry level", options=["VA Far", "VA Close", "POC"], group=groupEngine)
+orderMode = input.string("Auto", "Entry order type", options=["Auto", "Stop Only", "Limit Only"], group=groupEngine)
+rrChoice = input.string("1:1", "Risk:Reward", options=["1:1", "1:1.5", "1:2", "2:1", "3:1"], group=groupEngine)
+maxRiskUSD = input.float(200, "Initial risk cap USD per contract", minval=1, maxval=600, step=25, group=groupEngine)
+useTP = input.bool(true, "Take profit enabled", group=groupEngine)
+rows = input.int(60, "Volume profile bins", minval=10, maxval=80, group=groupEngine)
+vaPercent = input.float(0.7, "Value area", minval=0.5, maxval=0.95, step=0.05, group=groupEngine)
+profileCap = input.int(4000, "Maximum 1m profile candles", minval=100, maxval=8000, group=groupEngine)
+commissionUSD = input.float(1.0, "Round-trip commission USD", minval=0, step=0.25, group=groupEngine)
+groupVisual = "DAE-27 Display"
+showSetup = input.bool(true, "Blue setup arrows", group=groupVisual)
+showEntry = input.bool(true, "Entry marks", group=groupVisual)
+showExit = input.bool(true, "Green TP / Red SL marks", group=groupVisual)
+keepLabels = input.int(450, "Keep last N event marks (max 480)", minval=20, maxval=480, group=groupVisual)
+showQA = input.bool(true, "Display SHADOW status dashboard", group=groupVisual)
+
+if not (timeframe.isminutes and (timeframe.multiplier == 1 or timeframe.multiplier == 5 or timeframe.multiplier == 30))
+    runtime.error("DAE-27 viewer: use a 1m, 5m, or 30m chart.")
+
+// One tuple request captures every accessible minute inside the chart bar.
+// No chart OHLC values are used in the trading engine.
+[ts, os, hs, ls, cs, vs] = request.security_lower_tf(syminfo.tickerid, "1", [time, open, high, low, close, volume])
+
+// Completed 30m candles from 1m time buckets. 30min boundaries align in UTC.
+var int bucket = na
+var float aggH = na
+var float aggL = na
+var float aggC = na
+var array<float> h30 = array.new_float()
+var array<float> l30 = array.new_float()
+var array<float> c30 = array.new_float()
+
+// Rolling 1m cache holds creator candle minutes before setup is confirmed.
+var array<int> cacheT = array.new_int()
+var array<float> cacheH = array.new_float()
+var array<float> cacheL = array.new_float()
+var array<float> cacheV = array.new_float()
+var array<float> pH = array.new_float()
+var array<float> pL = array.new_float()
+var array<float> pV = array.new_float()
+var bool active = false
+var bool bullishGap = false
+var int direction = 0
+var float gapTop = na
+var float gapBottom = na
+var float creatorHigh = na
+var float creatorLow = na
+var int activatedAt = na
+
+// Frozen synthetic 1m pending order and its risk. No chart-TF recomputation.
+var bool pending = false
+var bool isStop = false
+var int tradeSide = 0
+var float limitEntry = na
+var float frozenStop = na
+var float frozenTP = na
+var bool submitted = false
+var bool inTrade = false
+var float actualEntry = na
+var float actualStop = na
+var float actualTP = na
+var int actualSide = 0
+var int closed = 0
+var int wins = 0
+var int losses = 0
+var float net = 0
+var int processedMins = 0
+var array<label> allMarks = array.new_label()
+
+f_mark(int t, float p, string txt, color col, string kind) =>
+    label lab = na
+    if kind == "up"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_arrowup, color=col, textcolor=col, size=size.large)
+    else if kind == "down"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_arrowdown, color=col, textcolor=col, size=size.large)
+    else if kind == "tp"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_up, color=col, textcolor=color.white, size=size.small)
+    else if kind == "sl"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    else
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_center, color=col, textcolor=color.white, size=size.tiny)
+    array.push(allMarks, lab)
+    if array.size(allMarks) > keepLabels
+        label.delete(array.shift(allMarks))
+
+f_target(float e, float top, float bot, int side) =>
+    bool topValid = side == 1 ? top > e : top < e
+    bool botValid = side == 1 ? bot > e : bot < e
+    float value = na
+    if topValid and botValid
+        value := math.abs(top - e) <= math.abs(bot - e) ? top : bot
+    else if topValid
+        value := top
+    else if botValid
+        value := bot
+    value
+
+// Deterministic synthetic model; same across chart timeframes when 1m
+// coverage and history starting states match. Distinct from TV emulator.
+if barstate.isconfirmed
+    int count = array.size(ts)
+    if count > 0
+        for i = 0 to count - 1
+            int tt = array.get(ts, i)
+            float oo = array.get(os, i)
+            float hh = array.get(hs, i)
+            float ll = array.get(ls, i)
+            float cc = array.get(cs, i)
+            float vv = nz(array.get(vs, i))
+            processedMins += 1
+            bool exitedThisMinute = false
+
+            // First process orders that were submitted at a PRIOR 1m close.
+            // Limit fills can improve at open; stop-entry gaps can worsen.
+            if pending and not inTrade
+                bool hit = tradeSide == 1 ? (isStop ? hh >= limitEntry : ll <= limitEntry) : (isStop ? ll <= limitEntry : hh >= limitEntry)
+                if hit
+                    float fill = tradeSide == 1 ? (isStop ? math.max(oo, limitEntry) : math.min(oo, limitEntry)) : (isStop ? math.min(oo, limitEntry) : math.max(oo, limitEntry))
+                    pending := false
+                    inTrade := true
+                    actualSide := tradeSide
+                    actualEntry := math.round_to_mintick(fill)
+                    actualStop := frozenStop
+                    actualTP := frozenTP
+                    if showEntry
+                        f_mark(tt, actualEntry, actualSide == 1 ? "L" : "S", color.blue, "entry")
+
+            // Same-minute stop/target ambiguity resolved conservatively:
+            // if both touch, STOP wins. This can differ from TV's fill path.
+            if inTrade
+                bool stopHit = actualSide == 1 ? ll <= actualStop : hh >= actualStop
+                bool tpHit = useTP and (actualSide == 1 ? hh >= actualTP : ll <= actualTP)
+                if stopHit or tpHit
+                    bool stopReason = stopHit
+                    float fillExit = na
+                    if stopReason
+                        fillExit := actualSide == 1 ? math.min(oo, actualStop) : math.max(oo, actualStop)
+                    else
+                        fillExit := actualSide == 1 ? math.max(oo, actualTP) : math.min(oo, actualTP)
+                    fillExit := math.round_to_mintick(fillExit)
+                    float pnl = actualSide * (fillExit - actualEntry) * syminfo.pointvalue - commissionUSD
+                    net += pnl
+                    closed += 1
+                    if pnl > 0
+                        wins += 1
+                    else if pnl < 0
+                        losses += 1
+                    if showExit
+                        f_mark(tt, fillExit, stopReason ? "SL" : "TP", stopReason ? color.red : color.green, stopReason ? "sl" : "tp")
+                    inTrade := false
+                    exitedThisMinute := true
+
+            // Aggregate 30m from 1m bars. Detect CRT/FVG only at rollover
+            // AFTER the previous 30m candle has actually closed.
+            int curBucket = int(math.floor(tt / 1800000.0))
+            bool newBucket = na(bucket) or curBucket != bucket
+            if na(bucket)
+                bucket := curBucket
+                aggH := hh
+                aggL := ll
+                aggC := cc
+            else if newBucket
+                array.push(h30, aggH)
+                array.push(l30, aggL)
+                array.push(c30, aggC)
+                if array.size(h30) > 4
+                    array.shift(h30)
+                    array.shift(l30)
+                    array.shift(c30)
+                int n = array.size(h30)
+                if n >= 3
+                    float lastH = array.get(h30, n-1)
+                    float lastL = array.get(l30, n-1)
+                    float lastC = array.get(c30, n-1)
+                    float prevH = array.get(h30, n-2)
+                    float prevL = array.get(l30, n-2)
+                    float oldH = array.get(h30, n-3)
+                    float oldL = array.get(l30, n-3)
+                    bool fvgUp = lastL > oldH
+                    bool fvgDn = lastH < oldL
+                    bool inside = lastC >= prevL and lastC <= prevH
+                    bool sweepUp = lastL < prevL and inside
+                    bool sweepDn = lastH > prevH and inside
+                    if (fvgUp or fvgDn) and (sweepUp or sweepDn)
+                        // A newer CRT+FVG supersedes any unfilled pending
+                        // order; open trades keep their frozen brackets.
+                        if not inTrade
+                            pending := false
+                        array.clear(pH)
+                        array.clear(pL)
+                        array.clear(pV)
+                        int startCreator = int((bucket) * 1800000)
+                        for j = 0 to array.size(cacheT) - 1
+                            if array.get(cacheT, j) >= startCreator
+                                array.push(pH, array.get(cacheH, j))
+                                array.push(pL, array.get(cacheL, j))
+                                array.push(pV, array.get(cacheV, j))
+                        active := true
+                        bullishGap := fvgUp
+                        direction := sweepUp and not sweepDn ? 1 : sweepDn and not sweepUp ? -1 : 0
+                        gapTop := fvgUp ? lastL : oldL
+                        gapBottom := fvgUp ? oldH : lastH
+                        creatorHigh := lastH
+                        creatorLow := lastL
+                        activatedAt := tt
+                        submitted := false
+                        if showSetup
+                            if direction == 1
+                                f_mark(tt, ll, "SETUP", color.blue, "up")
+                            else if direction == -1
+                                f_mark(tt, hh, "SETUP", color.blue, "down")
+                bucket := curBucket
+                aggH := hh
+                aggL := ll
+                aggC := cc
+            else
+                aggH := math.max(aggH, hh)
+                aggL := math.min(aggL, ll)
+                aggC := cc
+
+            // Keep creator candle data before it leaves the cache.
+            array.push(cacheT, tt)
+            array.push(cacheH, hh)
+            array.push(cacheL, ll)
+            array.push(cacheV, vv)
+            if array.size(cacheT) > 120
+                array.shift(cacheT)
+                array.shift(cacheH)
+                array.shift(cacheL)
+                array.shift(cacheV)
+
+            if active
+                array.push(pH, hh)
+                array.push(pL, ll)
+                array.push(pV, vv)
+                if array.size(pH) > profileCap
+                    array.shift(pH)
+                    array.shift(pL)
+                    array.shift(pV)
+                // Same touch-mitigation as DAE-26, AFTER activation minute.
+                if tt > activatedAt and (bullishGap ? ll <= gapTop : hh >= gapBottom)
+                    active := false
+
+            // Calculate/freeze 1m setup levels exactly once.
+            if active and not submitted and not inTrade and not pending and not exitedThisMinute and direction != 0 and array.size(pH) > 0
+                float hiProf = array.max(pH)
+                float loProf = array.min(pL)
+                float width = hiProf - loProf
+                if width > 0
+                    float step = width / rows
+                    array<float> hist = array.new_float(rows, 0.0)
+                    for j = 0 to array.size(pH) - 1
+                        float h = array.get(pH, j)
+                        float l = array.get(pL, j)
+                        float vol = array.get(pV, j)
+                        int firstBin = int(math.max(0, math.min(rows - 1, math.floor((l-loProf)/step))))
+                        int lastBin = int(math.max(0, math.min(rows - 1, math.floor((h-loProf)/step))))
+                        if h > l
+                            for k = firstBin to lastBin
+                                float overlap = math.max(0.0, math.min(h, loProf+(k+1)*step) - math.max(l,loProf+k*step))
+                                if overlap > 0
+                                    array.set(hist, k, array.get(hist,k) + vol*overlap/(h-l))
+                        else
+                            array.set(hist, firstBin, array.get(hist,firstBin) + vol)
+                    int center = array.indexof(hist, array.max(hist))
+                    int left = center
+                    int right = center
+                    float accumulated = array.get(hist, center)
+                    float total = array.sum(hist)
+                    for j = 0 to rows - 1
+                        if accumulated >= total*vaPercent
+                            break
+                        float leftV = left > 0 ? array.get(hist,left-1) : -1.0
+                        float rightV = right < rows-1 ? array.get(hist,right+1) : -1.0
+                        if rightV > leftV and right < rows-1
+                            right += 1
+                            accumulated += array.get(hist,right)
+                        else if left > 0
+                            left -= 1
+                            accumulated += array.get(hist,left)
+                        else if right < rows-1
+                            right += 1
+                            accumulated += array.get(hist,right)
+                    float vah = loProf + (right+1)*step
+                    float val = loProf + left*step
+                    float poc = loProf + (center+0.5)*step
+                    float entry = entryLevel=="VA Far" ? (direction==1 ? val : vah) : entryLevel=="VA Close" ? (direction==1 ? vah : val) : poc
+                    entry := math.round_to_mintick(entry)
+                    float tp = f_target(entry,gapTop,gapBottom,direction)
+                    if not na(tp)
+                        tp := math.round_to_mintick(tp)
+                        if math.abs(tp-entry) >= syminfo.mintick
+                            float rr = rrChoice=="1:2" ? 2.0 : rrChoice=="1:1.5" ? 1.5 : rrChoice=="2:1" ? 0.5 : rrChoice=="3:1" ? (1.0/3.0) : 1.0
+                            float slUncapped = entry-direction*math.abs(tp-entry)/rr
+                            float capSl = direction==1 ? entry-maxRiskUSD/syminfo.pointvalue : entry+maxRiskUSD/syminfo.pointvalue
+                            float sl = math.round_to_mintick(direction==1 ? math.max(slUncapped,capSl) : math.min(slUncapped,capSl))
+                            bool stopOrder = direction==1 ? entry>cc : entry<cc
+                            bool limitOrder = direction==1 ? entry<cc : entry>cc
+                            bool allowed = orderMode=="Auto" or (orderMode=="Stop Only" and stopOrder) or (orderMode=="Limit Only" and limitOrder)
+                            submitted := true
+                            if allowed
+                                limitEntry := entry
+                                frozenStop := sl
+                                frozenTP := tp
+                                tradeSide := direction
+                                isStop := stopOrder
+                                pending := true
+            // Expire unfilled orders when the associated profile is touched.
+            if not active and pending
+                pending := false
+
+var table panel = table.new(position.top_right,2,7, bgcolor=color.new(color.black,12))
+if barstate.islast
+    table.clear(panel,0,0,1,6)
+    if showQA
+        table.cell(panel,0,0,"DAE-27 1m SHADOW",text_color=color.white,bgcolor=color.blue)
+        table.cell(panel,1,0,"NOT TV FILLS",text_color=color.white,bgcolor=color.red)
+        table.cell(panel,0,1,"Chart TF",text_color=color.white)
+        table.cell(panel,1,1,timeframe.period,text_color=color.white)
+        table.cell(panel,0,2,"1m processed",text_color=color.white)
+        table.cell(panel,1,2,str.tostring(processedMins),text_color=color.white)
+        table.cell(panel,0,3,"Closed shadow trades",text_color=color.white)
+        table.cell(panel,1,3,str.tostring(closed),text_color=color.white)
+        table.cell(panel,0,4,"Shadow net USD",text_color=color.white)
+        table.cell(panel,1,4,str.tostring(net,"#.##"),text_color=color.yellow)
+        table.cell(panel,0,5,"Wins / Losses",text_color=color.white)
+        table.cell(panel,1,5,str.tostring(wins)+" / "+str.tostring(losses),text_color=color.white)
+        table.cell(panel,0,6,"Validation",text_color=color.white)
+        table.cell(panel,1,6,"NOT VERIFIED",text_color=color.orange)
