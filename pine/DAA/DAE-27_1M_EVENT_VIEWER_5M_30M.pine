@@ -18,6 +18,9 @@ orderMode = input.string("Auto", "Entry order type", options=["Auto", "Stop Only
 rrChoice = input.string("1:1", "Risk:Reward", options=["1:1", "1:1.5", "1:2", "2:1", "3:1"], group=groupEngine)
 maxRiskUSD = input.float(200, "Initial risk cap USD per contract", minval=1, maxval=600, step=25, group=groupEngine)
 useTP = input.bool(true, "Take profit enabled", group=groupEngine)
+stopMode = input.string("Fixed", "Stoploss mode", options=["Fixed", "Trailing"], group=groupEngine)
+trailActivationTicks = input.int(20, "Trailing activation ticks", minval=1, group=groupEngine)
+trailDistanceTicks = input.int(20, "Trailing distance ticks", minval=1, group=groupEngine)
 rows = input.int(60, "Volume profile bins", minval=10, maxval=80, group=groupEngine)
 vaPercent = input.float(0.7, "Value area", minval=0.5, maxval=0.95, step=0.05, group=groupEngine)
 profileCap = input.int(4000, "Maximum 1m profile candles", minval=100, maxval=8000, group=groupEngine)
@@ -80,6 +83,11 @@ var int wins = 0
 var int losses = 0
 var float net = 0
 var int processedMins = 0
+var int entryMinNo = na
+var float favorable = na
+var bool armed = false
+var float previousHigh = na
+var float previousLow = na
 var array<label> allMarks = array.new_label()
 
 f_mark(int t, float p, string txt, color col, string kind) =>
@@ -137,6 +145,9 @@ if barstate.isconfirmed
                     actualEntry := math.round_to_mintick(fill)
                     actualStop := frozenStop
                     actualTP := frozenTP
+                    entryMinNo := processedMins
+                    favorable := actualEntry
+                    armed := false
                     if showEntry
                         f_mark(tt, actualEntry, actualSide == 1 ? "L" : "S", color.blue, "entry")
 
@@ -163,6 +174,9 @@ if barstate.isconfirmed
                     if showExit
                         f_mark(tt, fillExit, stopReason ? "SL" : "TP", stopReason ? color.red : color.green, stopReason ? "sl" : "tp")
                     inTrade := false
+                    favorable := na
+                    armed := false
+                    entryMinNo := na
                     exitedThisMinute := true
 
             // Aggregate 30m from 1m bars. Detect CRT/FVG only at rollover
@@ -184,6 +198,11 @@ if barstate.isconfirmed
                     array.shift(c30)
                 int n = array.size(h30)
                 if n >= 3
+                    // Expiry happens only at a confirmed 30m close.
+                    if active and tt > activatedAt
+                        float lastCompletedClose = array.get(c30, n-1)
+                        if bullishGap ? lastCompletedClose > creatorHigh : lastCompletedClose < creatorLow
+                            active := false
                     float lastH = array.get(h30, n-1)
                     float lastL = array.get(l30, n-1)
                     float lastC = array.get(c30, n-1)
@@ -320,9 +339,22 @@ if barstate.isconfirmed
                                 tradeSide := direction
                                 isStop := stopOrder
                                 pending := true
-            // Expire unfilled orders when the associated profile is touched.
+            // Expire unfilled orders when the associated profile ends.
             if not active and pending
                 pending := false
+            // Update synthetic trailing stop AFTER processing current minute,
+            // using only the immediately PREVIOUS completed 1m candle.
+            if inTrade and stopMode == "Trailing" and processedMins > entryMinNo and not na(previousHigh)
+                float trailTrigger = trailActivationTicks * syminfo.mintick
+                float trailDistance = trailDistanceTicks * syminfo.mintick
+                favorable := actualSide == 1 ? math.max(favorable, previousHigh) : math.min(favorable, previousLow)
+                if actualSide == 1 ? favorable >= actualEntry + trailTrigger : favorable <= actualEntry - trailTrigger
+                    armed := true
+                if armed
+                    float candidate = actualSide == 1 ? favorable - trailDistance : favorable + trailDistance
+                    actualStop := math.round_to_mintick(actualSide == 1 ? math.max(actualStop, candidate) : math.min(actualStop, candidate))
+            previousHigh := hh
+            previousLow := ll
 
 var table panel = table.new(position.top_right,2,7, bgcolor=color.new(color.black,12))
 if barstate.islast
