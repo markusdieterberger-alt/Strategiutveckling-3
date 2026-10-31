@@ -1,9 +1,9 @@
 //@version=6
-strategy("DAE-27 | 1m Canonical Execution VA Far RR cap600", overlay=true, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, max_boxes_count=500, max_labels_count=500, max_lines_count=300)
+strategy("DAE-27 | 1m Canonical Execution VA Far RR cap600", overlay=true, pyramiding=0, process_orders_on_close=false, calc_on_every_tick=false, commission_type=strategy.commission.cash_per_contract, commission_value=0.5, max_boxes_count=500, max_labels_count=500, max_lines_count=300)
 // DAE-27: TradingView strategy can run only on the CHART timeframe.
 // Enforce 1m so that switching to 5m/30m can never silently recalculate
 // a conflicting set of native strategy fills. 30m must use separate viewer.
-// No changes to DAE-26's 1m entry, bracket, TP/SL or VP calculations.
+// DAE-26 1m entry, bracket, TP/SL and VP rules unchanged. Default commission is set to $0.50/side (= $1 round trip, 1 MNQ); inspect Strategy Properties for overrides.
 if not (timeframe.isminutes and timeframe.multiplier == 1)
     runtime.error("DAE-27 strategy requires MNQ 1m. Open the separate DAE-27 1m event viewer on 5m/30m.")
 
