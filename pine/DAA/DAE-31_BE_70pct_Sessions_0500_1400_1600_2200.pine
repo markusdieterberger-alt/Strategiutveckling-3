@@ -316,8 +316,8 @@ var bool trailingArmed = false
 var bool nativeBEArmed = false
 var int fillBar = na
 float nativeBEActivationPriceThisBar = na
-if vpNewSignal
-    if pendingId != "" and strategy.position_size == 0
+if vpNewSignal and strategy.position_size == 0
+    if pendingId != ""
         strategy.cancel(pendingId)
     pendingId := ""
     setupSubmitted := false
