@@ -693,7 +693,7 @@ if barstate.isconfirmed and shadowRun
                     else if pnl < 0
                         losses += 1
                     if showExit
-                        f_mark(tt, fillExit, stopReason ? "SL" : "TP", stopReason ? color.red : color.green, stopReason ? "sl" : "tp")
+                        f_mark(tt, fillExit, (stopReason ? "SL " : "TP ") + str.tostring(pnl, "#.##") + " USD", stopReason ? color.red : color.green, stopReason ? "sl" : "tp")
                     inTrade := false
                     favorable := na
                     armed := false
@@ -882,7 +882,7 @@ if barstate.islast and shadowRun
     table.clear(panel,0,0,1,6)
     if showQA
         table.cell(panel,0,0,"DAE-29 1m SHADOW",text_color=color.white,bgcolor=color.blue)
-        table.cell(panel,1,0,"NOT TV FILLS",text_color=color.white,bgcolor=color.red)
+        table.cell(panel,1,0,"30m: 1m SHADOW",text_color=color.white,bgcolor=color.red)
         table.cell(panel,0,1,"Chart TF",text_color=color.white)
         table.cell(panel,1,1,timeframe.period,text_color=color.white)
         table.cell(panel,0,2,"1m processed",text_color=color.white)
