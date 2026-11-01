@@ -1,0 +1,1207 @@
+//@version=6
+strategy("DAE-34 | 1m / 30m PERFORMANCE DASHBOARD | VA breakout sessions BE", overlay=true, pyramiding=0, process_orders_on_close=true, calc_on_every_tick=false, commission_type=strategy.commission.cash_per_contract, commission_value=0.5, max_boxes_count=500, max_labels_count=500, max_lines_count=300)
+// DAE-27: TradingView strategy can run only on the CHART timeframe.
+// Enforce 1m so that switching to 5m/30m can never silently recalculate
+// a conflicting set of native strategy fills. 30m must use separate viewer.
+// DAE-26 1m entry, bracket, TP/SL and VP rules unchanged. Default commission is set to $0.50/side (= $1 round trip, 1 MNQ); inspect Strategy Properties for overrides.
+// Session times are local Stockholm wall-clock; DST is automatic.
+// The terminal minute (13:59/21:59) closes at exactly 14:00/22:00
+// in the native 1m emulator when its close is available.
+// All entries are blocked if their NEXT fill could occur outside sessions.
+string sessionTZ = "Europe/Stockholm"
+f_inTradeHours(int t) =>
+    int m = hour(t, sessionTZ) * 60 + minute(t, sessionTZ)
+    (m >= 300 and m < 840) or (m >= 960 and m < 1320)
+
+bool nativeRun = timeframe.isminutes and timeframe.multiplier == 1
+bool shadowRun = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 30)
+if not (nativeRun or shadowRun)
+    runtime.error("DAE-30: use a real MNQ 1m, 5m or 30m chart. 30m has 1m SHADOW results only.")
+
+// Orders are created at bar CLOSE and fill no sooner than the next bar.
+// Requiring both this bar's start and close inside a session prevents
+// new pending orders at 13:59 / 21:59 from filling in the closed session.
+bool nativeTradeMinute = nativeRun and f_inTradeHours(time)
+bool nativeCanSubmit = nativeTradeMinute and f_inTradeHours(time_close)
+bool nativeSessionBoundary = nativeRun and not nativeCanSubmit
+
+lookbackHours = input.int(1000, "Lookback (completed 30m bars)", minval=3, maxval=5000)
+maxZones = input.int(150, "Maximum visible zones", minval=1, maxval=200)
+bullFill = input.color(color.new(color.teal, 82), "Bullish FVG")
+bearFill = input.color(color.new(color.red, 82), "Bearish FVG")
+var array<box> zoneBoxes = array.new<box>()
+var array<float> zoneTop = array.new<float>()
+var array<float> zoneBottom = array.new<float>()
+var array<int> zoneBorn = array.new<int>()
+var array<bool> zoneBull = array.new<bool>()
+hourTime = request.security(syminfo.tickerid, "30", time, lookahead=barmerge.lookahead_on)
+hourTop = request.security(syminfo.tickerid, "30", high[1], lookahead=barmerge.lookahead_on)
+hourBottom = request.security(syminfo.tickerid, "30", low[1], lookahead=barmerge.lookahead_on)
+hourOldHigh = request.security(syminfo.tickerid, "30", high[3], lookahead=barmerge.lookahead_on)
+hourOldLow = request.security(syminfo.tickerid, "30", low[3], lookahead=barmerge.lookahead_on)
+hourBorn = request.security(syminfo.tickerid, "30", time[1], lookahead=barmerge.lookahead_on)
+chartSeconds = timeframe.in_seconds()
+canDetect = nativeRun
+newHour = ta.change(hourTime) != 0
+if canDetect and newHour and not na(hourOldHigh) and not na(hourOldLow)
+    bullGap = hourBottom > hourOldHigh
+    bearGap = hourTop < hourOldLow
+    if bullGap or bearGap
+        zTop = bullGap ? hourBottom : hourOldLow
+        zBot = bullGap ? hourOldHigh : hourTop
+        b = box.new(left=hourBorn, top=zTop, right=time, bottom=zBot,
+            xloc=xloc.bar_time, extend=extend.right,
+            bgcolor=bullGap ? bullFill : bearFill,
+            border_color=bullGap ? color.new(color.teal, 25) : color.new(color.red, 25))
+        array.push(zoneBoxes, b)
+        array.push(zoneTop, zTop)
+        array.push(zoneBottom, zBot)
+        array.push(zoneBorn, hourBorn)
+        array.push(zoneBull, bullGap)
+if array.size(zoneBoxes) > 0
+    for i = array.size(zoneBoxes) - 1 to 0
+        b = array.get(zoneBoxes, i)
+        top = array.get(zoneTop, i)
+        bot = array.get(zoneBottom, i)
+        born = array.get(zoneBorn, i)
+        isBull = array.get(zoneBull, i)
+        touched = time > born and (isBull ? low <= top : high >= bot)
+        expired = time - born > lookbackHours * 1800000
+        if touched or expired
+            box.delete(b)
+            array.remove(zoneBoxes, i)
+            array.remove(zoneTop, i)
+            array.remove(zoneBottom, i)
+            array.remove(zoneBorn, i)
+            array.remove(zoneBull, i)
+while array.size(zoneBoxes) > maxZones
+    box.delete(array.shift(zoneBoxes))
+    array.shift(zoneTop)
+    array.shift(zoneBottom)
+    array.shift(zoneBorn)
+    array.shift(zoneBull)
+showCRT = input.bool(true, "Show 30m CRT arrows")
+maxCRTLabels = input.int(400, "Maximum CRT arrows", minval=1, maxval=490)
+crtColor = input.color(color.purple, "CRT arrow color")
+var array<label> crtLabels = array.new<label>()
+crtPrevHigh = request.security(syminfo.tickerid, "30", high[2], lookahead=barmerge.lookahead_on)
+crtPrevLow = request.security(syminfo.tickerid, "30", low[2], lookahead=barmerge.lookahead_on)
+crtConfirmedClose = request.security(syminfo.tickerid, "30", close[1], lookahead=barmerge.lookahead_on)
+crtConfirmedHigh = request.security(syminfo.tickerid, "30", high[1], lookahead=barmerge.lookahead_on)
+crtConfirmedLow = request.security(syminfo.tickerid, "30", low[1], lookahead=barmerge.lookahead_on)
+crtCloseInside = crtConfirmedClose >= crtPrevLow and crtConfirmedClose <= crtPrevHigh
+crtBull = crtConfirmedLow < crtPrevLow and crtCloseInside
+crtBear = crtConfirmedHigh > crtPrevHigh and crtCloseInside
+crtAdjacentFVG = (hourBottom > hourOldHigh) or (hourTop < hourOldLow)
+if showCRT and canDetect and newHour and crtAdjacentFVG and not na(crtPrevLow) and not na(crtPrevHigh)
+    if crtBull
+        arrow = label.new(x=hourBorn, y=crtConfirmedLow, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowup, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+    if crtBear
+        arrow = label.new(x=hourBorn, y=crtConfirmedHigh, text="", xloc=xloc.bar_time,
+             yloc=yloc.price, style=label.style_arrowdown, color=crtColor,
+             textcolor=crtColor, size=size.small)
+        array.push(crtLabels, arrow)
+while array.size(crtLabels) > maxCRTLabels
+    label.delete(array.shift(crtLabels))
+vpBins = input.int(60, "DAD VP rows", minval=10, maxval=80)
+vpValueArea = input.float(0.70, "DAD value area", minval=0.50, maxval=0.95, step=0.05)
+vpMaxCandles = input.int(4000, "DAD max 1m candles", minval=100, maxval=8000)
+vpWidthMinutes = input.int(45, "DAD histogram maximum width (minutes)", minval=5, maxval=240)
+vpHistogramColor = input.color(color.new(color.gray, 85), "DAD histogram (gray)")
+vpVAColor = input.color(color.new(color.silver, 78), "DAD value area histogram (gray)")
+vpPOCColor = input.color(color.black, "DAD POC")
+vpVAHColor = input.color(color.black, "DAD VAH")
+vpVALColor = input.color(color.black, "DAD VAL")
+vpCanRun = nativeRun
+vpIsOneMinute = timeframe.isminutes and timeframe.multiplier == 1
+[ltfT, ltfH, ltfL, ltfV] = request.security_lower_tf(syminfo.tickerid, "1", [time, high, low, volume])
+var array<int> cacheT = array.new_int()
+var array<float> cacheH = array.new_float()
+var array<float> cacheL = array.new_float()
+var array<float> cacheV = array.new_float()
+var array<int> profileT = array.new_int()
+var array<float> profileH = array.new_float()
+var array<float> profileL = array.new_float()
+var array<float> profileV = array.new_float()
+var bool vpActive = false
+var bool vpIsBullFVG = false
+var int vpTradeDirection = 0
+var float vpGapTop = na
+var float vpGapBottom = na
+var int vpBorn = na
+var int vpActivationTime = na
+var float vpCreatorHigh = na
+var float vpCreatorLow = na
+vpNewSignal = vpCanRun and nativeCanSubmit and newHour and crtAdjacentFVG and (crtBull or crtBear) and not na(hourBorn)
+showSetupMarkers = input.bool(true, "Blue setup arrows (30m CRT + FVG)", group="DAE-25 Markers")
+showExitMarkers = input.bool(true, "Green TP / red SL fill markers", group="DAE-25 Markers")
+plotshape(showSetupMarkers and vpNewSignal and crtBull and not crtBear,
+     title="DAE-25 LONG setup", style=shape.arrowup,
+     location=location.belowbar, color=color.blue,
+     text="SETUP", textcolor=color.blue, size=size.large)
+plotshape(showSetupMarkers and vpNewSignal and crtBear and not crtBull,
+     title="DAE-25 SHORT setup", style=shape.arrowdown,
+     location=location.abovebar, color=color.blue,
+     text="SETUP", textcolor=color.blue, size=size.large)
+if vpNewSignal
+    array.clear(profileT)
+    array.clear(profileH)
+    array.clear(profileL)
+    array.clear(profileV)
+    vpActive := true
+    vpBorn := hourBorn
+    vpCreatorHigh := hourTop
+    vpCreatorLow := hourBottom
+    vpActivationTime := time
+    vpTradeDirection := crtBull and not crtBear ? 1 : crtBear and not crtBull ? -1 : 0
+    vpIsBullFVG := hourBottom > hourOldHigh
+    vpGapTop := vpIsBullFVG ? hourBottom : hourOldLow
+    vpGapBottom := vpIsBullFVG ? hourOldHigh : hourTop
+    if array.size(cacheT) > 0
+        for j = 0 to array.size(cacheT) - 1
+            t = array.get(cacheT, j)
+            if t >= vpBorn
+                array.push(profileT, t)
+                array.push(profileH, array.get(cacheH, j))
+                array.push(profileL, array.get(cacheL, j))
+                array.push(profileV, array.get(cacheV, j))
+if vpCanRun and barstate.isconfirmed
+    if vpIsOneMinute
+        array.push(cacheT, time)
+        array.push(cacheH, high)
+        array.push(cacheL, low)
+        array.push(cacheV, nz(volume))
+        if array.size(cacheT) > 120
+            array.shift(cacheT)
+            array.shift(cacheH)
+            array.shift(cacheL)
+            array.shift(cacheV)
+        if vpActive and time >= vpBorn
+            array.push(profileT, time)
+            array.push(profileH, high)
+            array.push(profileL, low)
+            array.push(profileV, nz(volume))
+    else
+        intrabars = array.size(ltfT)
+        if intrabars > 0
+            for j = 0 to intrabars - 1
+                t = array.get(ltfT, j)
+                h = array.get(ltfH, j)
+                l = array.get(ltfL, j)
+                v = nz(array.get(ltfV, j))
+                array.push(cacheT, t)
+                array.push(cacheH, h)
+                array.push(cacheL, l)
+                array.push(cacheV, v)
+                if array.size(cacheT) > 120
+                    array.shift(cacheT)
+                    array.shift(cacheH)
+                    array.shift(cacheL)
+                    array.shift(cacheV)
+                if vpActive and t >= vpBorn
+                    array.push(profileT, t)
+                    array.push(profileH, h)
+                    array.push(profileL, l)
+                    array.push(profileV, v)
+if vpActive and time > vpActivationTime
+    if vpIsBullFVG ? low <= vpGapTop : high >= vpGapBottom
+        vpActive := false
+if vpActive and newHour and time > vpActivationTime
+    if vpIsBullFVG ? crtConfirmedClose > vpCreatorHigh : crtConfirmedClose < vpCreatorLow
+        vpActive := false
+if array.size(profileT) > vpMaxCandles
+    array.shift(profileT)
+    array.shift(profileH)
+    array.shift(profileL)
+    array.shift(profileV)
+// VA Close Breakout: legacy 5m-confirmed VAH/VAL LIMIT retest (DAE-32).
+// VA Close Breakout Direct: 1m- or 5m-confirmed close outside value area,
+// followed by MARKET order at the SAME 1m bar close (TV emulator).
+// LONG: confirmed close > dynamic VAH; SHORT: confirmed close < VAL.
+// Normal VA Far / VA Close / POC and legacy limit mode are retained.
+entryLevel = input.string("VA Far", "Entry Level", options=["VA Close", "VA Far", "POC", "VA Close Breakout", "VA Close Breakout Direct"], group="DAE-20 Position")
+bool vaBreakoutMode = entryLevel == "VA Close Breakout"
+bool vaDirectMode = entryLevel == "VA Close Breakout Direct"
+breakoutCloseTF = input.string("5m", "Direct breakout confirmation candle", options=["5m", "1m"], group="DAE-33 Direct Breakout")
+// On the 1m native strategy this identifies the LAST completed 1m
+// candle of a 5m period, exactly when its 5m closing price is known.
+bool native5mCandleClosed = nativeRun and barstate.isconfirmed and time_close == time_close("5")
+positionWidth = input.int(2, "Position box width (hours)", minval=1, maxval=2, group="DAE-20 Position")
+var array<box> positionBoxes = array.new<box>()
+var array<line> positionLines = array.new<line>()
+var array<int> positionExpiry = array.new<int>()
+var int lastPositionBorn = na
+maxPositionHistory = input.int(60, "Max historical position boxes", minval=1, maxval=80, group="DAE-20 Position")
+f_nearestTarget(float entry, float edgeA, float edgeB, int dir) =>
+    float result = na
+    bool validA = dir == 1 ? edgeA > entry : edgeA < entry
+    bool validB = dir == 1 ? edgeB > entry : edgeB < entry
+    if validA and validB
+        result := math.abs(edgeA - entry) <= math.abs(edgeB - entry) ? edgeA : edgeB
+    else if validA
+        result := edgeA
+    else if validB
+        result := edgeB
+    result
+f_position(float entry, float target, float stop, int dir, string caption, int leftT, int rightT) =>
+    if not na(target) and target != entry and dir != 0
+        box rewardBox = box.new(leftT, math.max(entry, target), rightT, math.min(entry, target), xloc=xloc.bar_time, bgcolor=color.new(color.green, 78), border_color=color.new(color.green, 35))
+        box riskBox = box.new(leftT, math.max(entry, stop), rightT, math.min(entry, stop), xloc=xloc.bar_time, bgcolor=color.new(color.red, 78), border_color=color.new(color.red, 35))
+        array.push(positionBoxes, rewardBox)
+        array.push(positionBoxes, riskBox)
+        array.push(positionLines, line.new(leftT, entry, rightT, entry, xloc=xloc.bar_time, color=color.white, width=2))
+        array.push(positionExpiry, leftT + 1000 * 3600000)
+entryOrderMode = input.string("Auto", "Entry Order Mode", options=["Auto", "Stop Only", "Limit Only"], group="DAE-20 Strategy")
+rrChoice = input.string("1:1", "Risk:Reward (FVG target fixed)", options=["1:1", "1:1.5", "1:2", "2:1", "3:1"], group="DAE-20 Exit")
+stopMode = input.string("Fixed", "Stoploss mode", options=["Fixed", "Trailing"], group="DAE-20 Exit")
+useTakeProfit = input.bool(true, "Enable Take Profit", group="DAE-20 Exit")
+trailActivationTicks = input.int(20, "Trailing activation (ticks in profit)", minval=1, group="DAE-20 Exit")
+trailDistanceTicks = input.int(20, "Trailing distance (ticks)", minval=1, group="DAE-20 Exit")
+maxRiskUSD = input.float(200.0, "Maximum initial risk per contract (USD)", minval=1.0, maxval=600.0, step=25.0, group="DAE-20 Exit")
+// BE trigger calculated as percentage of the frozen TP distance.
+// BE adjustments apply only AFTER a confirmed 1m bar, not retroactively.
+enableBE = input.bool(true, "Enable Break Even", group="DAE-31 Break Even")
+beTriggerPercent = input.float(70.0, "BE when % of TP reached", minval=1.0, maxval=99.0, step=1.0, group="DAE-31 Break Even")
+showBEMarkers = input.bool(true, "Yellow BE activation and exit marks", group="DAE-31 Break Even")
+rrValue = rrChoice == "1:2" ? 2.0 : rrChoice == "1:1.5" ? 1.5 : rrChoice == "2:1" ? 0.5 : rrChoice == "3:1" ? (1.0 / 3.0) : 1.0
+var int auditSignals = 0
+var int auditCandidates = 0
+var int auditOrders = 0
+var int auditFiltered = 0
+var int auditFilled = 0
+var int auditExpired = 0
+var int auditClosed = 0
+var int lastClosedCount = 0
+var int lastOpenCount = 0
+if vpNewSignal
+    auditSignals += 1
+float tpExitPriceThisBar = na
+float slExitPriceThisBar = na
+float sessionExitPriceThisBar = na
+float beExitPriceThisBar = na
+if strategy.closedtrades > lastClosedCount
+    for tradeIdx = lastClosedCount to strategy.closedtrades - 1
+        string exitReason = strategy.closedtrades.exit_comment(tradeIdx)
+        float exitPrice = strategy.closedtrades.exit_price(tradeIdx)
+        if exitReason == "TP"
+            tpExitPriceThisBar := exitPrice
+        else if exitReason == "SL"
+            slExitPriceThisBar := exitPrice
+        else if exitReason == "SESSION_CLOSE"
+            sessionExitPriceThisBar := exitPrice
+        else if exitReason == "BE"
+            beExitPriceThisBar := exitPrice
+    auditClosed += strategy.closedtrades - lastClosedCount
+    lastClosedCount := strategy.closedtrades
+plotshape(showExitMarkers ? tpExitPriceThisBar : na,
+     title="DAE-25 TP filled", style=shape.labelup,
+     location=location.absolute, color=color.green,
+     text="TP", textcolor=color.white, size=size.small)
+plotshape(showExitMarkers ? slExitPriceThisBar : na,
+     title="DAE-25 SL filled", style=shape.labeldown,
+     location=location.absolute, color=color.red,
+     text="SL", textcolor=color.white, size=size.small)
+plotshape(showExitMarkers ? sessionExitPriceThisBar : na,
+     title="DAE-30 Session close", style=shape.labeldown,
+     location=location.absolute, color=color.orange,
+     text="TIME", textcolor=color.black, size=size.small)
+plotshape(showBEMarkers ? beExitPriceThisBar : na,
+     title="DAE-31 Filled BE stop", style=shape.labelup,
+     location=location.absolute, color=color.yellow,
+     text="BE", textcolor=color.black, size=size.small)
+if strategy.opentrades > lastOpenCount
+    auditFilled += strategy.opentrades - lastOpenCount
+lastOpenCount := strategy.opentrades
+var string pendingId = ""
+var int pendingBorn = na
+var float pendingEntry = na
+var float pendingTarget = na
+var float pendingStop = na
+var bool setupSubmitted = false
+float native5mBreakoutMark = na
+float nativeDirect1mMark = na
+float nativeDirect5mMark = na
+var float protectedStop = na
+var float favorableExtreme = na
+var bool trailingArmed = false
+var bool nativeBEArmed = false
+var int fillBar = na
+float nativeBEActivationPriceThisBar = na
+if vpNewSignal and strategy.position_size == 0
+    if pendingId != ""
+        strategy.cancel(pendingId)
+    pendingId := ""
+    setupSubmitted := false
+if vpCanRun and nativeCanSubmit and barstate.isconfirmed and vpActive and not setupSubmitted and strategy.position_size == 0 and array.size(profileH) > 0
+    btHi = array.max(profileH)
+    btLo = array.min(profileL)
+    btSpan = btHi - btLo
+    if btSpan > 0
+        btStep = btSpan / vpBins
+        btHist = array.new_float(vpBins, 0.0)
+        for j = 0 to array.size(profileH) - 1
+            hh = array.get(profileH, j)
+            ll = array.get(profileL, j)
+            vv = array.get(profileV, j)
+            firstBin = int(math.max(0, math.min(vpBins - 1, math.floor((ll - btLo) / btStep))))
+            lastBin = int(math.max(0, math.min(vpBins - 1, math.floor((hh - btLo) / btStep))))
+            if hh > ll
+                for k = firstBin to lastBin
+                    overlap = math.max(0.0, math.min(hh, btLo + (k + 1) * btStep) - math.max(ll, btLo + k * btStep))
+                    if overlap > 0
+                        array.set(btHist, k, array.get(btHist, k) + vv * overlap / (hh - ll))
+            else
+                array.set(btHist, firstBin, array.get(btHist, firstBin) + vv)
+        btPoc = array.indexof(btHist, array.max(btHist))
+        btLeft = btPoc
+        btRight = btPoc
+        btAccum = array.get(btHist, btPoc)
+        btTotal = array.sum(btHist)
+        for j = 0 to vpBins - 1
+            if btAccum >= btTotal * vpValueArea
+                break
+            leftVol = btLeft > 0 ? array.get(btHist, btLeft - 1) : -1.0
+            rightVol = btRight < vpBins - 1 ? array.get(btHist, btRight + 1) : -1.0
+            if rightVol > leftVol and btRight < vpBins - 1
+                btRight += 1
+                btAccum += array.get(btHist, btRight)
+            else if btLeft > 0
+                btLeft -= 1
+                btAccum += array.get(btHist, btLeft)
+            else if btRight < vpBins - 1
+                btRight += 1
+                btAccum += array.get(btHist, btRight)
+        btVAH = btLo + (btRight + 1) * btStep
+        btVAL = btLo + btLeft * btStep
+        btPOC = btLo + (btPoc + 0.5) * btStep
+        // The legacy retest mode enters at the frozen VA edge.
+        // Direct mode enters at the breakout candle's actual CLOSE.
+        btEntry = vaDirectMode ? close : (entryLevel == "VA Close" or vaBreakoutMode) ? (vpTradeDirection == 1 ? btVAH : btVAL) : entryLevel == "VA Far" ? (vpTradeDirection == 1 ? btVAL : btVAH) : btPOC
+        bool nativeOutsideVA = vpTradeDirection == 1 ? close > btVAH : vpTradeDirection == -1 ? close < btVAL : false
+        bool nativeBreakoutConfirmed = vaBreakoutMode and native5mCandleClosed and nativeOutsideVA
+        bool nativeDirectConfirmed = vaDirectMode and (breakoutCloseTF == "1m" or native5mCandleClosed) and nativeOutsideVA
+        if vpTradeDirection != 0 and not na(btEntry)
+            btEntry := math.round_to_mintick(btEntry)
+            btTarget = f_nearestTarget(btEntry, vpGapTop, vpGapBottom, vpTradeDirection)
+            if not na(btTarget)
+                btTarget := math.round_to_mintick(btTarget)
+                btStop = math.round_to_mintick(btEntry - vpTradeDirection * math.abs(btTarget - btEntry) / rrValue)
+                // Never submit before the 5m close confirms the breakout.
+                if math.abs(btTarget - btEntry) >= syminfo.mintick and (not vaBreakoutMode or nativeBreakoutConfirmed) and (not vaDirectMode or nativeDirectConfirmed)
+                    auditCandidates += 1
+                    pendingId := vpTradeDirection == 1 ? "DAE-L" : "DAE-S"
+                    pendingBorn := vpBorn
+                    pendingEntry := btEntry
+                    pendingTarget := btTarget
+                    pendingStop := math.round_to_mintick(vpTradeDirection == 1 ? math.max(btStop, btEntry - maxRiskUSD / syminfo.pointvalue) : math.min(btStop, btEntry + maxRiskUSD / syminfo.pointvalue))
+                    bool isStopOrder = vpTradeDirection == 1 ? pendingEntry > close : pendingEntry < close
+                    bool isLimitOrder = vpTradeDirection == 1 ? pendingEntry < close : pendingEntry > close
+                    // Both breakout modes ignore the separate stop/limit Entry Order Mode.
+                    bool orderAllowed = vaBreakoutMode or vaDirectMode or entryOrderMode == "Auto" or (entryOrderMode == "Stop Only" and isStopOrder) or (entryOrderMode == "Limit Only" and isLimitOrder)
+                    setupSubmitted := true
+                    if orderAllowed
+                        auditOrders += 1
+                        if vaBreakoutMode
+                            native5mBreakoutMark := close
+                        if vaDirectMode
+                            if breakoutCloseTF == "1m"
+                                nativeDirect1mMark := close
+                            else
+                                nativeDirect5mMark := close
+                        int boxEnd = time + positionWidth * 3600000
+                        f_position(pendingEntry, pendingTarget, pendingStop, vpTradeDirection, entryLevel, time, boxEnd)
+                        while array.size(positionExpiry) > maxPositionHistory
+                            box.delete(array.shift(positionBoxes))
+                            box.delete(array.shift(positionBoxes))
+                            line.delete(array.shift(positionLines))
+                            array.shift(positionExpiry)
+                        if vaDirectMode
+                            // process_orders_on_close=true permits native
+                            // market fills at the signal candle CLOSE.
+                            if vpTradeDirection == 1
+                                strategy.entry(pendingId, strategy.long)
+                            else
+                                strategy.entry(pendingId, strategy.short)
+                        else if vaBreakoutMode
+                            if vpTradeDirection == 1
+                                strategy.entry(pendingId, strategy.long, limit=pendingEntry)
+                            else
+                                strategy.entry(pendingId, strategy.short, limit=pendingEntry)
+                        else
+                            if vpTradeDirection == 1
+                                if isStopOrder
+                                    strategy.entry(pendingId, strategy.long, stop=pendingEntry)
+                                else
+                                    strategy.entry(pendingId, strategy.long, limit=pendingEntry)
+                            else
+                                if isStopOrder
+                                    strategy.entry(pendingId, strategy.short, stop=pendingEntry)
+                                else
+                                    strategy.entry(pendingId, strategy.short, limit=pendingEntry)
+                        strategy.exit("Exit-" + pendingId, from_entry=pendingId, stop=pendingStop, limit=useTakeProfit ? pendingTarget : na, comment_profit="TP", comment_loss="SL")
+                    else
+                        auditFiltered += 1
+                        pendingId := ""
+plotshape(vaBreakoutMode ? native5mBreakoutMark : na,
+     title="DAE-33 VA breakout, LIMIT retest",
+     style=shape.labelup, location=location.absolute,
+     color=color.blue, text="5m LIMIT", textcolor=color.white, size=size.tiny)
+plotshape(vaDirectMode ? nativeDirect1mMark : na,
+     title="DAE-33 Direct entry on 1m confirmed close",
+     style=shape.labelup, location=location.absolute,
+     color=color.blue, text="1m MKT", textcolor=color.white, size=size.tiny)
+plotshape(vaDirectMode ? nativeDirect5mMark : na,
+     title="DAE-33 Direct entry on 5m confirmed close",
+     style=shape.labelup, location=location.absolute,
+     color=color.blue, text="5m MKT", textcolor=color.white, size=size.tiny)
+if strategy.position_size != 0 and strategy.position_size[1] == 0
+    protectedStop := pendingStop
+    favorableExtreme := strategy.position_avg_price
+    trailingArmed := false
+    nativeBEArmed := false
+    fillBar := bar_index
+if nativeRun and strategy.position_size != 0 and barstate.isconfirmed and not na(protectedStop)
+    bool isLong = strategy.position_size > 0
+    float entryPx = strategy.position_avg_price
+    float tpDistance = isLong ? pendingTarget - entryPx : entryPx - pendingTarget
+    // BE only after initial entry fill bar. Candle must be confirmed.
+    // Newly modified stop order starts AFTER this 1m candle, not inside it.
+    if enableBE and not nativeBEArmed and nativeCanSubmit and bar_index > nz(fillBar, bar_index) and not na(tpDistance) and tpDistance > syminfo.mintick
+        float triggerPx = entryPx + (isLong ? 1.0 : -1.0) * tpDistance * (beTriggerPercent / 100.0)
+        if isLong ? high >= triggerPx : low <= triggerPx
+            nativeBEArmed := true
+            protectedStop := math.round_to_mintick(isLong ? math.max(protectedStop, entryPx) : math.min(protectedStop, entryPx))
+            nativeBEActivationPriceThisBar := entryPx
+
+    if stopMode == "Trailing"
+        float activation = trailActivationTicks * syminfo.mintick
+        float distance = trailDistanceTicks * syminfo.mintick
+        if bar_index > nz(fillBar, bar_index) and not na(high[1]) and not na(low[1])
+            favorableExtreme := isLong ? math.max(favorableExtreme, high[1]) : math.min(favorableExtreme, low[1])
+            if isLong ? favorableExtreme >= entryPx + activation : favorableExtreme <= entryPx - activation
+                trailingArmed := true
+            if trailingArmed
+                float candidate = isLong ? favorableExtreme - distance : favorableExtreme + distance
+                protectedStop := math.round_to_mintick(isLong ? math.max(protectedStop, candidate) : math.min(protectedStop, candidate))
+
+    // If trailing advanced beyond entry, classify the exit as SL, not BE.
+    bool stopAtBE = nativeBEArmed and math.abs(protectedStop - entryPx) < syminfo.mintick * 0.51
+    if enableBE or stopMode == "Trailing"
+        strategy.exit("Exit-" + pendingId, from_entry=pendingId, stop=protectedStop, limit=useTakeProfit ? pendingTarget : na,
+             comment_profit="TP", comment_loss=stopAtBE ? "BE" : "SL")
+
+plotshape(showBEMarkers ? nativeBEActivationPriceThisBar : na,
+     title="DAE-31 BE activated", style=shape.labelup,
+     location=location.absolute, color=color.yellow, text="BE ON",
+     textcolor=color.black, size=size.small)
+if strategy.position_size == 0 and strategy.position_size[1] != 0
+    protectedStop := na
+    favorableExtreme := na
+    trailingArmed := false
+    nativeBEArmed := false
+    fillBar := na
+if not vpActive and pendingId != "" and strategy.position_size == 0
+    auditExpired += 1
+    strategy.cancel(pendingId)
+    pendingId := ""
+
+// Cancel all pending entries/brackets when off-session or at the final
+// in-session 1m close. Immediately=true executes a native simulated
+// market close at this bar close, avoiding next-bar session exposure.
+// NOTE: A real broker may not offer this exact fill price.
+if nativeSessionBoundary and barstate.isconfirmed
+    strategy.cancel_all()
+    if strategy.position_size != 0
+        strategy.close_all(comment="SESSION_CLOSE", immediately=true)
+    pendingId := ""
+    vpActive := false
+    setupSubmitted := false
+    nativeBEArmed := false
+var array<box> vpDrawBoxes = array.new<box>()
+var line vpPocLine = na
+var line vpVahLine = na
+var line vpValLine = na
+if barstate.islast
+    if array.size(vpDrawBoxes) > 0
+        for j = array.size(vpDrawBoxes) - 1 to 0
+            box.delete(array.get(vpDrawBoxes, j))
+        array.clear(vpDrawBoxes)
+    if not na(vpPocLine)
+        line.delete(vpPocLine)
+        vpPocLine := na
+    if not na(vpVahLine)
+        line.delete(vpVahLine)
+        vpVahLine := na
+    if not na(vpValLine)
+        line.delete(vpValLine)
+        vpValLine := na
+    n = array.size(profileT)
+    if vpActive and vpCanRun and n > 0
+        rangeHi = array.max(profileH)
+        rangeLo = array.min(profileL)
+        span = rangeHi - rangeLo
+        if span > 0
+            step = span / vpBins
+            hist = array.new_float(vpBins, 0.0)
+            for j = 0 to n - 1
+                hh = array.get(profileH, j)
+                ll = array.get(profileL, j)
+                vv = array.get(profileV, j)
+                b0 = int(math.max(0, math.min(vpBins - 1, math.floor((ll - rangeLo) / step))))
+                b1 = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                candleRange = hh - ll
+                if candleRange > 0
+                    for k = b0 to b1
+                        binLow = rangeLo + k * step
+                        binHigh = binLow + step
+                        overlap = math.max(0.0, math.min(hh, binHigh) - math.max(ll, binLow))
+                        if overlap > 0
+                            array.set(hist, k, array.get(hist, k) + vv * overlap / candleRange)
+                else
+                    midBin = int(math.max(0, math.min(vpBins - 1, math.floor((hh - rangeLo) / step))))
+                    array.set(hist, midBin, array.get(hist, midBin) + vv)
+            maxV = array.max(hist)
+            totalV = array.sum(hist)
+            pocIndex = array.indexof(hist, maxV)
+            vaLeft = pocIndex
+            vaRight = pocIndex
+            vaVolume = array.get(hist, pocIndex)
+            for j = 0 to vpBins - 1
+                if vaVolume >= totalV * vpValueArea
+                    break
+                leftVol = vaLeft > 0 ? array.get(hist, vaLeft - 1) : -1.0
+                rightVol = vaRight < vpBins - 1 ? array.get(hist, vaRight + 1) : -1.0
+                if rightVol > leftVol and vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+                else if vaLeft > 0
+                    vaLeft -= 1
+                    vaVolume += array.get(hist, vaLeft)
+                else if vaRight < vpBins - 1
+                    vaRight += 1
+                    vaVolume += array.get(hist, vaRight)
+            pocPrice = rangeLo + (pocIndex + 0.5) * step
+            vahPrice = rangeLo + (vaRight + 1) * step
+            valPrice = rangeLo + vaLeft * step
+            baseTime = time
+            maxWidthMs = vpWidthMinutes * 60000
+            for k = 0 to vpBins - 1
+                vol = array.get(hist, k)
+                if vol > 0 and maxV > 0
+                    rightTime = baseTime + int(math.max(60000, maxWidthMs * vol / maxV))
+                    boxColor = k >= vaLeft and k <= vaRight ? vpVAColor : vpHistogramColor
+                    b = box.new(left=baseTime, top=rangeLo + (k + 1) * step,
+                        right=rightTime, bottom=rangeLo + k * step,
+                        xloc=xloc.bar_time, bgcolor=boxColor,
+                        border_color=color.new(boxColor, 100))
+                    array.push(vpDrawBoxes, b)
+            vpPocLine := line.new(vpBorn, pocPrice, time, pocPrice,
+                 xloc=xloc.bar_time, color=vpPOCColor, width=2)
+            vpVahLine := line.new(vpBorn, vahPrice, time, vahPrice,
+                 xloc=xloc.bar_time, color=vpVAHColor, style=line.style_dashed)
+            vpValLine := line.new(vpBorn, valPrice, time, valPrice,
+                 xloc=xloc.bar_time, color=vpVALColor, style=line.style_dashed)
+// Optional historical date-window report; default off to avoid overlapping the new full-history dashboard.
+showParityDashboard = input.bool(false, "Show EXTRA date-window dashboard (1m only)", group="DAE-24 Dashboard")
+startDate = input.time(timestamp("21 Sep 2026 00:00 +0000"), "From (UTC)", group="DAE-24 Dashboard")
+endDate = input.time(timestamp("28 Sep 2026 00:00 +0000"), "To (UTC, exclusive)", group="DAE-24 Dashboard")
+parityLocation = input.string("Top Left", "EXTRA dashboard location", options=["Top Left", "Top Right", "Bottom Left", "Bottom Right"], group="DAE-24 Dashboard")
+parityPos = parityLocation == "Top Left" ? position.top_left : parityLocation == "Bottom Left" ? position.bottom_left : parityLocation == "Bottom Right" ? position.bottom_right : position.top_right
+var table parityPanel = table.new(parityPos, 2, 16, bgcolor=color.rgb(15, 22, 34), frame_color=color.yellow, frame_width=3, border_color=color.rgb(75, 90, 115), border_width=1)
+f_money(float x) => str.tostring(x, "#.##")
+f_row(int row, string labelText, string valueText) =>
+    table.cell(parityPanel, 0, row, labelText, text_color=color.white, bgcolor=color.rgb(24, 34, 49), text_size=size.normal)
+    table.cell(parityPanel, 1, row, valueText, text_color=color.yellow, bgcolor=color.rgb(24, 34, 49), text_size=size.normal)
+var int selectedTrades = 0
+var int selectedWins = 0
+var int selectedLosses = 0
+var float selectedNet = 0.0
+var float selectedGrossProfit = 0.0
+var float selectedGrossLoss = 0.0
+var float selectedPeak = 0.0
+var float selectedMaxClosedDD = 0.0
+var int processedTradeCount = 0
+if strategy.closedtrades > processedTradeCount
+    for idx = processedTradeCount to strategy.closedtrades - 1
+        exitTs = strategy.closedtrades.exit_time(idx)
+        tradeProfit = strategy.closedtrades.profit(idx) - strategy.closedtrades.commission(idx)
+        if not na(exitTs) and exitTs >= startDate and exitTs < endDate
+            selectedTrades += 1
+            selectedNet += tradeProfit
+            if tradeProfit > 0
+                selectedWins += 1
+                selectedGrossProfit += tradeProfit
+            else if tradeProfit < 0
+                selectedLosses += 1
+                selectedGrossLoss += -tradeProfit
+            selectedPeak := math.max(selectedPeak, selectedNet)
+            selectedMaxClosedDD := math.max(selectedMaxClosedDD, selectedPeak - selectedNet)
+    processedTradeCount := strategy.closedtrades
+selectedWinPct = selectedTrades > 0 ? selectedWins * 100.0 / selectedTrades : na
+selectedPF = selectedGrossLoss > 0 ? selectedGrossProfit / selectedGrossLoss : na
+if barstate.islast
+    table.clear(parityPanel, 0, 0, 1, 15)
+    if showParityDashboard and nativeRun
+        table.cell(parityPanel, 0, 0, "DAE-26 DATE PARITY", text_color=color.black, bgcolor=color.yellow, text_size=size.large)
+        table.cell(parityPanel, 1, 0, "EXIT WINDOW", text_color=color.black, bgcolor=color.yellow, text_size=size.normal)
+        f_row(1, "From (UTC)", str.format_time(startDate, "yyyy-MM-dd HH:mm", "UTC"))
+        f_row(2, "To exclusive (UTC)", str.format_time(endDate, "yyyy-MM-dd HH:mm", "UTC"))
+        f_row(3, "Net PnL USD", f_money(selectedNet))
+        f_row(4, "Closed-trade DD USD", f_money(selectedMaxClosedDD))
+        f_row(5, "Closed trades", str.tostring(selectedTrades))
+        f_row(6, "Winners / losers", str.tostring(selectedWins) + " / " + str.tostring(selectedLosses))
+        f_row(7, "Winrate %", str.tostring(selectedWinPct, "#.##"))
+        f_row(8, "Profit factor", str.tostring(selectedPF, "#.###"))
+        f_row(9, "Gross profit USD", f_money(selectedGrossProfit))
+        f_row(10, "Gross loss USD", f_money(selectedGrossLoss))
+        f_row(11, "All-history closed", str.tostring(strategy.closedtrades))
+        f_row(12, "Symbol / TF", syminfo.ticker + " / " + timeframe.period)
+        f_row(13, "Entry / Mode", entryLevel + " / " + entryOrderMode)
+        f_row(14, "RR / SL / TP", rrChoice + " / " + stopMode + " / " + (useTakeProfit ? "On" : "Off"))
+        f_row(15, "Date valid?", endDate > startDate ? "YES" : "NO")
+
+
+
+// ================================================================
+// DAE-29: REAL TradingView 5m/30m CHART with 1m synthetic replay.
+// On 1m: native DAE-26-based Strategy Tester and exchange emulator.
+// On 5m/30m: no native strategy orders; results below come exclusively
+// from chronological 1m replay, which can differ from native TV fills.
+// A separate TradingView 30m Strategy Tester will show zero native orders.
+// NO modification to CT V1/V2 or prior DAE version.
+// ================================================================
+shadowCommissionUSD = input.float(1.0, "1m shadow round-trip commission (USD)", minval=0, step=0.25, group="DAE-29 Real 30m Chart (1m Shadow)")
+
+groupVisual = "DAE-29 Real 30m Chart (1m Shadow)"
+showSetup = input.bool(true, "Blue setup arrows", group=groupVisual)
+showEntry = input.bool(true, "Entry marks", group=groupVisual)
+showExit = input.bool(true, "Green TP / Red SL marks", group=groupVisual)
+keepLabels = input.int(450, "Keep last N event marks (max 480)", minval=20, maxval=480, group=groupVisual)
+showQA = input.bool(true, "Show PERFORMANCE DASHBOARD", group="DAE-34 Dashboard")
+dashLocation = input.string("Top Right", "Dashboard location", options=["Top Right", "Top Left", "Bottom Right", "Bottom Left"], group="DAE-34 Dashboard")
+dashFontChoice = input.string("Normal", "Text size", options=["Small", "Normal", "Large"], group="DAE-34 Dashboard")
+dashTextSize = dashFontChoice == "Small" ? size.small : dashFontChoice == "Large" ? size.large : size.normal
+dashPosition = dashLocation == "Top Left" ? position.top_left : dashLocation == "Bottom Right" ? position.bottom_right : dashLocation == "Bottom Left" ? position.bottom_left : position.top_right
+
+// Shadow reads all accessible minute candles only on real 5m/30m chart.
+
+// One tuple request captures every accessible minute inside the chart bar.
+// No chart OHLC values are used in the trading engine.
+[ts, os, hs, ls, cs, vs] = request.security_lower_tf(syminfo.tickerid, "1", [time, open, high, low, close, volume])
+
+// Completed 30m candles from 1m time buckets. 30min boundaries align in UTC.
+var int bucket = na
+var float aggH = na
+var float aggL = na
+var float aggC = na
+var array<float> h30 = array.new_float()
+var array<float> l30 = array.new_float()
+var array<float> c30 = array.new_float()
+
+// Rolling 1m cache holds creator candle minutes before setup is confirmed.
+var array<int> shadowCacheT = array.new_int()
+var array<float> shadowCacheH = array.new_float()
+var array<float> shadowCacheL = array.new_float()
+var array<float> shadowCacheV = array.new_float()
+var array<float> pH = array.new_float()
+var array<float> pL = array.new_float()
+var array<float> pV = array.new_float()
+var bool active = false
+var bool bullishGap = false
+var int direction = 0
+var float gapTop = na
+var float gapBottom = na
+var float creatorHigh = na
+var float creatorLow = na
+var int activatedAt = na
+
+// Frozen synthetic 1m pending order and its risk. No chart-TF recomputation.
+var bool pending = false
+var bool isStop = false
+var int tradeSide = 0
+var float limitEntry = na
+var float frozenStop = na
+var float frozenTP = na
+var bool submitted = false
+var bool inTrade = false
+var float actualEntry = na
+var float actualStop = na
+var float actualTP = na
+var int actualSide = 0
+var int closed = 0
+var int wins = 0
+var int losses = 0
+var float net = 0
+var int processedMins = 0
+var int shadowSessionClosed = 0
+var float shadowGrossProfit = 0.0
+var float shadowGrossLoss = 0.0
+var float shadowEquityPeak = 0.0
+var float shadowMaxClosedDD = 0.0
+var int shadowBEStops = 0
+var int shadowTPExits = 0
+var int shadowSLExits = 0
+var int shadowFirstMinute = na
+var int shadowLastMinute = na
+var int entryMinNo = na
+var float favorable = na
+var bool armed = false
+var bool shadowBEArmed = false
+var float previousHigh = na
+var float previousLow = na
+var array<label> allMarks = array.new_label()
+
+f_mark(int t, float p, string txt, color col, string kind) =>
+    label lab = na
+    if kind == "up"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_arrowup, color=col, textcolor=col, size=size.large)
+    else if kind == "down"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_arrowdown, color=col, textcolor=col, size=size.large)
+    else if kind == "tp"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_up, color=col, textcolor=color.white, size=size.small)
+    else if kind == "sl"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_down, color=col, textcolor=color.white, size=size.small)
+    else if kind == "be"
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_up, color=color.yellow, textcolor=color.black, size=size.small)
+    else
+        lab := label.new(t, p, txt, xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_center, color=col, textcolor=color.white, size=size.tiny)
+    array.push(allMarks, lab)
+    if array.size(allMarks) > keepLabels
+        label.delete(array.shift(allMarks))
+
+f_target(float e, float top, float bot, int side) =>
+    bool topValid = side == 1 ? top > e : top < e
+    bool botValid = side == 1 ? bot > e : bot < e
+    float value = na
+    if topValid and botValid
+        value := math.abs(top - e) <= math.abs(bot - e) ? top : bot
+    else if topValid
+        value := top
+    else if botValid
+        value := bot
+    value
+
+// Deterministic synthetic model; same across chart timeframes when 1m
+// coverage and history starting states match. Distinct from TV emulator.
+if barstate.isconfirmed and shadowRun
+    int count = array.size(ts)
+    if count > 0
+        for i = 0 to count - 1
+            int tt = array.get(ts, i)
+            float oo = array.get(os, i)
+            float hh = array.get(hs, i)
+            float ll = array.get(ls, i)
+            float cc = array.get(cs, i)
+            float vv = nz(array.get(vs, i))
+            processedMins += 1
+            if na(shadowFirstMinute)
+                shadowFirstMinute := tt
+            shadowLastMinute := tt
+            bool exitedThisMinute = false
+            bool minuteIsAllowed = f_inTradeHours(tt)
+            bool followingMinuteAllowed = f_inTradeHours(tt + 60000)
+            // If minute data is missing at the boundary, flatten at the
+            // first available off-session minute OPEN, before any order fills.
+            if not minuteIsAllowed
+                pending := false
+                active := false
+                submitted := false
+                if inTrade
+                    float forcedFill = math.round_to_mintick(oo)
+                    float forcedPnl = actualSide * (forcedFill - actualEntry) * syminfo.pointvalue - shadowCommissionUSD
+                    net += forcedPnl
+                    shadowGrossProfit += math.max(forcedPnl, 0.0)
+                    shadowGrossLoss += math.max(-forcedPnl, 0.0)
+                    shadowEquityPeak := math.max(shadowEquityPeak, net)
+                    shadowMaxClosedDD := math.max(shadowMaxClosedDD, shadowEquityPeak - net)
+                    closed += 1
+                    shadowSessionClosed += 1
+                    if forcedPnl > 0
+                        wins += 1
+                    else if forcedPnl < 0
+                        losses += 1
+                    if showExit
+                        f_mark(tt, forcedFill, "TIME " + str.tostring(forcedPnl, "#.##") + " USD", color.orange, "sl")
+                    inTrade := false
+                    entryMinNo := na
+                    favorable := na
+                    armed := false
+                    shadowBEArmed := false
+                    exitedThisMinute := true
+
+            // First process orders that were submitted at a PRIOR 1m close.
+            // Limit fills can improve at open; stop-entry gaps can worsen.
+            if pending and not inTrade and minuteIsAllowed
+                bool hit = tradeSide == 1 ? (isStop ? hh >= limitEntry : ll <= limitEntry) : (isStop ? ll <= limitEntry : hh >= limitEntry)
+                if hit
+                    float fill = tradeSide == 1 ? (isStop ? math.max(oo, limitEntry) : math.min(oo, limitEntry)) : (isStop ? math.min(oo, limitEntry) : math.max(oo, limitEntry))
+                    pending := false
+                    inTrade := true
+                    actualSide := tradeSide
+                    actualEntry := math.round_to_mintick(fill)
+                    actualStop := frozenStop
+                    actualTP := frozenTP
+                    entryMinNo := processedMins
+                    favorable := actualEntry
+                    armed := false
+                    shadowBEArmed := false
+                    if showEntry
+                        f_mark(tt, actualEntry, actualSide == 1 ? "L" : "S", color.blue, "entry")
+
+            // Same-minute stop/target ambiguity resolved conservatively:
+            // if both touch, STOP wins. This can differ from TV's fill path.
+            if inTrade and minuteIsAllowed
+                bool stopHit = actualSide == 1 ? ll <= actualStop : hh >= actualStop
+                bool tpHit = useTakeProfit and (actualSide == 1 ? hh >= actualTP : ll <= actualTP)
+                if stopHit or tpHit
+                    bool stopReason = stopHit
+                    bool beExitReason = stopHit and shadowBEArmed and math.abs(actualStop - actualEntry) < syminfo.mintick * 0.51
+                    float fillExit = na
+                    if stopReason
+                        fillExit := actualSide == 1 ? math.min(oo, actualStop) : math.max(oo, actualStop)
+                    else
+                        fillExit := actualSide == 1 ? math.max(oo, actualTP) : math.min(oo, actualTP)
+                    fillExit := math.round_to_mintick(fillExit)
+                    float pnl = actualSide * (fillExit - actualEntry) * syminfo.pointvalue - shadowCommissionUSD
+                    net += pnl
+                    shadowGrossProfit += math.max(pnl, 0.0)
+                    shadowGrossLoss += math.max(-pnl, 0.0)
+                    shadowEquityPeak := math.max(shadowEquityPeak, net)
+                    shadowMaxClosedDD := math.max(shadowMaxClosedDD, shadowEquityPeak - net)
+                    if beExitReason
+                        shadowBEStops += 1
+                    else if stopReason
+                        shadowSLExits += 1
+                    else
+                        shadowTPExits += 1
+                    closed += 1
+                    if pnl > 0
+                        wins += 1
+                    else if pnl < 0
+                        losses += 1
+                    if showExit
+                        string exitCaption = (beExitReason ? "BE " : stopReason ? "SL " : "TP ") + str.tostring(pnl, "#.##") + " USD"
+                        f_mark(tt, fillExit, exitCaption, beExitReason ? color.yellow : stopReason ? color.red : color.green, beExitReason ? "be" : stopReason ? "sl" : "tp")
+                    inTrade := false
+                    favorable := na
+                    armed := false
+                    shadowBEArmed := false
+                    entryMinNo := na
+                    exitedThisMinute := true
+
+            // Aggregate 30m from 1m bars. Detect CRT/FVG only at rollover
+            // AFTER the previous 30m candle has actually closed.
+            int curBucket = int(math.floor(tt / 1800000.0))
+            bool newBucket = na(bucket) or curBucket != bucket
+            if na(bucket)
+                bucket := curBucket
+                aggH := hh
+                aggL := ll
+                aggC := cc
+            else if newBucket
+                array.push(h30, aggH)
+                array.push(l30, aggL)
+                array.push(c30, aggC)
+                if array.size(h30) > 4
+                    array.shift(h30)
+                    array.shift(l30)
+                    array.shift(c30)
+                int n = array.size(h30)
+                if n >= 3
+                    // Expiry happens only at a confirmed 30m close.
+                    if active and tt > activatedAt
+                        float lastCompletedClose = array.get(c30, n-1)
+                        if bullishGap ? lastCompletedClose > creatorHigh : lastCompletedClose < creatorLow
+                            active := false
+                    float lastH = array.get(h30, n-1)
+                    float lastL = array.get(l30, n-1)
+                    float lastC = array.get(c30, n-1)
+                    float prevH = array.get(h30, n-2)
+                    float prevL = array.get(l30, n-2)
+                    float oldH = array.get(h30, n-3)
+                    float oldL = array.get(l30, n-3)
+                    bool fvgUp = lastL > oldH
+                    bool fvgDn = lastH < oldL
+                    bool inside = lastC >= prevL and lastC <= prevH
+                    bool sweepUp = lastL < prevL and inside
+                    bool sweepDn = lastH > prevH and inside
+                    if (fvgUp or fvgDn) and (sweepUp or sweepDn) and minuteIsAllowed and followingMinuteAllowed
+                        // A newer CRT+FVG supersedes any unfilled pending
+                        // order; open trades keep their frozen brackets.
+                        if not inTrade
+                            pending := false
+                        array.clear(pH)
+                        array.clear(pL)
+                        array.clear(pV)
+                        int startCreator = int((bucket) * 1800000)
+                        for j = 0 to array.size(shadowCacheT) - 1
+                            if array.get(shadowCacheT, j) >= startCreator
+                                array.push(pH, array.get(shadowCacheH, j))
+                                array.push(pL, array.get(shadowCacheL, j))
+                                array.push(pV, array.get(shadowCacheV, j))
+                        active := true
+                        bullishGap := fvgUp
+                        direction := sweepUp and not sweepDn ? 1 : sweepDn and not sweepUp ? -1 : 0
+                        gapTop := fvgUp ? lastL : oldL
+                        gapBottom := fvgUp ? oldH : lastH
+                        creatorHigh := lastH
+                        creatorLow := lastL
+                        activatedAt := tt
+                        submitted := false
+                        if showSetup
+                            if direction == 1
+                                f_mark(tt, ll, "SETUP", color.blue, "up")
+                            else if direction == -1
+                                f_mark(tt, hh, "SETUP", color.blue, "down")
+                bucket := curBucket
+                aggH := hh
+                aggL := ll
+                aggC := cc
+            else
+                aggH := math.max(aggH, hh)
+                aggL := math.min(aggL, ll)
+                aggC := cc
+
+            // Keep creator candle data before it leaves the cache.
+            array.push(shadowCacheT, tt)
+            array.push(shadowCacheH, hh)
+            array.push(shadowCacheL, ll)
+            array.push(shadowCacheV, vv)
+            if array.size(shadowCacheT) > 120
+                array.shift(shadowCacheT)
+                array.shift(shadowCacheH)
+                array.shift(shadowCacheL)
+                array.shift(shadowCacheV)
+
+            if active
+                array.push(pH, hh)
+                array.push(pL, ll)
+                array.push(pV, vv)
+                if array.size(pH) > vpMaxCandles
+                    array.shift(pH)
+                    array.shift(pL)
+                    array.shift(pV)
+                // Same touch-mitigation as DAE-26, AFTER activation minute.
+                if tt > activatedAt and (bullishGap ? ll <= gapTop : hh >= gapBottom)
+                    active := false
+
+            // Calculate/freeze 1m setup levels exactly once.
+            if minuteIsAllowed and followingMinuteAllowed and active and not submitted and not inTrade and not pending and not exitedThisMinute and direction != 0 and array.size(pH) > 0
+                float hiProf = array.max(pH)
+                float loProf = array.min(pL)
+                float width = hiProf - loProf
+                if width > 0
+                    float step = width / vpBins
+                    array<float> hist = array.new_float(vpBins, 0.0)
+                    for j = 0 to array.size(pH) - 1
+                        float h = array.get(pH, j)
+                        float l = array.get(pL, j)
+                        float vol = array.get(pV, j)
+                        int firstBin = int(math.max(0, math.min(vpBins - 1, math.floor((l-loProf)/step))))
+                        int lastBin = int(math.max(0, math.min(vpBins - 1, math.floor((h-loProf)/step))))
+                        if h > l
+                            for k = firstBin to lastBin
+                                float overlap = math.max(0.0, math.min(h, loProf+(k+1)*step) - math.max(l,loProf+k*step))
+                                if overlap > 0
+                                    array.set(hist, k, array.get(hist,k) + vol*overlap/(h-l))
+                        else
+                            array.set(hist, firstBin, array.get(hist,firstBin) + vol)
+                    int center = array.indexof(hist, array.max(hist))
+                    int left = center
+                    int right = center
+                    float accumulated = array.get(hist, center)
+                    float total = array.sum(hist)
+                    for j = 0 to vpBins - 1
+                        if accumulated >= total*vpValueArea
+                            break
+                        float leftV = left > 0 ? array.get(hist,left-1) : -1.0
+                        float rightV = right < vpBins-1 ? array.get(hist,right+1) : -1.0
+                        if rightV > leftV and right < vpBins-1
+                            right += 1
+                            accumulated += array.get(hist,right)
+                        else if left > 0
+                            left -= 1
+                            accumulated += array.get(hist,left)
+                        else if right < vpBins-1
+                            right += 1
+                            accumulated += array.get(hist,right)
+                    float vah = loProf + (right+1)*step
+                    float val = loProf + left*step
+                    float poc = loProf + (center+0.5)*step
+                    float entry = vaDirectMode ? cc : entryLevel=="VA Far" ? (direction==1 ? val : vah) : entryLevel=="VA Close" or vaBreakoutMode ? (direction==1 ? vah : val) : poc
+                    // On 5m/30m charts we process chronological 1m candles.
+                    // This checks the LAST minute of a fully closed 5m bar.
+                    bool shadow5mCandleClosed = int(math.floor((tt + 60000) / 300000.0)) != int(math.floor(tt / 300000.0))
+                    bool shadowOutsideVA = direction==1 ? cc>vah : direction==-1 ? cc<val : false
+                    bool shadowBreakoutConfirmed = vaBreakoutMode and shadow5mCandleClosed and shadowOutsideVA
+                    bool shadowDirectConfirmed = vaDirectMode and (breakoutCloseTF=="1m" or shadow5mCandleClosed) and shadowOutsideVA
+                    entry := math.round_to_mintick(entry)
+                    float tp = f_target(entry,gapTop,gapBottom,direction)
+                    if not na(tp)
+                        tp := math.round_to_mintick(tp)
+                        if math.abs(tp-entry) >= syminfo.mintick and (not vaBreakoutMode or shadowBreakoutConfirmed) and (not vaDirectMode or shadowDirectConfirmed)
+                            float rr = rrChoice=="1:2" ? 2.0 : rrChoice=="1:1.5" ? 1.5 : rrChoice=="2:1" ? 0.5 : rrChoice=="3:1" ? (1.0/3.0) : 1.0
+                            float slUncapped = entry-direction*math.abs(tp-entry)/rr
+                            float capSl = direction==1 ? entry-maxRiskUSD/syminfo.pointvalue : entry+maxRiskUSD/syminfo.pointvalue
+                            float sl = math.round_to_mintick(direction==1 ? math.max(slUncapped,capSl) : math.min(slUncapped,capSl))
+                            bool stopOrder = direction==1 ? entry>cc : entry<cc
+                            bool limitOrder = direction==1 ? entry<cc : entry>cc
+                            bool allowed = vaBreakoutMode or vaDirectMode or entryOrderMode=="Auto" or (entryOrderMode=="Stop Only" and stopOrder) or (entryOrderMode=="Limit Only" and limitOrder)
+                            submitted := true
+                            if allowed
+                                if vaBreakoutMode and showSetup
+                                    f_mark(tt + 60000, cc, "5m BRK / LIMIT", color.blue, direction==1 ? "up" : "down")
+                                if vaDirectMode
+                                    // Direct order fills on THIS confirmed 1m
+                                    // CLOSE. No retest and no same-minute exit.
+                                    actualSide := direction
+                                    actualEntry := math.round_to_mintick(cc)
+                                    actualStop := sl
+                                    actualTP := tp
+                                    entryMinNo := processedMins
+                                    favorable := actualEntry
+                                    armed := false
+                                    shadowBEArmed := false
+                                    pending := false
+                                    inTrade := true
+                                    if showEntry
+                                        string tftxt = breakoutCloseTF=="1m" ? "1m MKT" : "5m MKT"
+                                        f_mark(tt + 60000, actualEntry, tftxt, color.blue, direction==1 ? "up" : "down")
+                                else
+                                    limitEntry := entry
+                                    frozenStop := sl
+                                    frozenTP := tp
+                                    tradeSide := direction
+                                    isStop := vaBreakoutMode ? false : stopOrder
+                                    pending := true
+            // Expire unfilled orders when the associated profile ends.
+            if not active and pending
+                pending := false
+            // BE activates only AFTER checking SL/TP against the OLD stop
+            // on this fully completed 1m candle. Stop changes NEXT minute.
+            if inTrade and enableBE and not shadowBEArmed and minuteIsAllowed and followingMinuteAllowed and processedMins > entryMinNo
+                float targetDistance = actualSide * (actualTP - actualEntry)
+                if not na(targetDistance) and targetDistance > syminfo.mintick
+                    float triggerPx = actualEntry + actualSide * targetDistance * (beTriggerPercent / 100.0)
+                    bool reached = actualSide == 1 ? hh >= triggerPx : ll <= triggerPx
+                    if reached
+                        shadowBEArmed := true
+                        actualStop := math.round_to_mintick(actualSide == 1 ? math.max(actualStop, actualEntry) : math.min(actualStop, actualEntry))
+                        if showBEMarkers
+                            f_mark(tt + 60000, actualEntry, "BE ON " + str.tostring(beTriggerPercent, "#") + "%", color.yellow, "be")
+            // Update synthetic trailing stop AFTER processing current minute,
+            // using only the immediately PREVIOUS completed 1m candle.
+            if inTrade and stopMode == "Trailing" and processedMins > entryMinNo and not na(previousHigh)
+                float trailTrigger = trailActivationTicks * syminfo.mintick
+                float trailDistance = trailDistanceTicks * syminfo.mintick
+                favorable := actualSide == 1 ? math.max(favorable, previousHigh) : math.min(favorable, previousLow)
+                if actualSide == 1 ? favorable >= actualEntry + trailTrigger : favorable <= actualEntry - trailTrigger
+                    armed := true
+                if armed
+                    float candidate = actualSide == 1 ? favorable - trailDistance : favorable + trailDistance
+                    actualStop := math.round_to_mintick(actualSide == 1 ? math.max(actualStop, candidate) : math.min(actualStop, candidate))
+            // The final minute of each session can still hit an existing
+            // stop/target. If neither hit, flatten at its closing price.
+            if minuteIsAllowed and not followingMinuteAllowed
+                if inTrade
+                    float forcedFill = math.round_to_mintick(cc)
+                    float forcedPnl = actualSide * (forcedFill - actualEntry) * syminfo.pointvalue - shadowCommissionUSD
+                    net += forcedPnl
+                    shadowGrossProfit += math.max(forcedPnl, 0.0)
+                    shadowGrossLoss += math.max(-forcedPnl, 0.0)
+                    shadowEquityPeak := math.max(shadowEquityPeak, net)
+                    shadowMaxClosedDD := math.max(shadowMaxClosedDD, shadowEquityPeak - net)
+                    closed += 1
+                    shadowSessionClosed += 1
+                    if forcedPnl > 0
+                        wins += 1
+                    else if forcedPnl < 0
+                        losses += 1
+                    if showExit
+                        f_mark(tt + 60000, forcedFill, "TIME " + str.tostring(forcedPnl, "#.##") + " USD", color.orange, "sl")
+                    inTrade := false
+                    entryMinNo := na
+                    favorable := na
+                    armed := false
+                    shadowBEArmed := false
+                // Never carry an unfilled order or active setup overnight.
+                pending := false
+                active := false
+                submitted := false
+            previousHigh := hh
+            previousLow := ll
+
+// ------------------------------------------------------------------
+// DAE-34 on-chart performance dashboard. 1m uses TV strategy.* builtins.
+// 5m/30m uses the separate, unverified chronological 1m SHADOW ledger.
+// Gross profit / loss in SHADOW sum net of estimated per-trade commission.
+// Closed-trade DD uses only realised trade P&L, not intratrade excursion.
+// ------------------------------------------------------------------
+var float nativeTotalClosedEquity = 0.0
+var float nativeClosedPeak = 0.0
+var float nativeMaxClosedDD = 0.0
+var int nativeClosedProcessed = 0
+var int nativeSessionExits = 0
+if nativeRun and strategy.closedtrades > nativeClosedProcessed
+    for ndx = nativeClosedProcessed to strategy.closedtrades - 1
+        float nativePnl = strategy.closedtrades.profit(ndx) - strategy.closedtrades.commission(ndx)
+        nativeTotalClosedEquity += nativePnl
+        nativeClosedPeak := math.max(nativeClosedPeak, nativeTotalClosedEquity)
+        nativeMaxClosedDD := math.max(nativeMaxClosedDD, nativeClosedPeak - nativeTotalClosedEquity)
+        if strategy.closedtrades.exit_comment(ndx) == "SESSION_CLOSE"
+            nativeSessionExits += 1
+    nativeClosedProcessed := strategy.closedtrades
+
+var table performancePanel = table.new(dashPosition, 2, 14,
+     bgcolor=color.rgb(11, 18, 29), frame_color=color.rgb(73, 108, 144),
+     frame_width=2, border_color=color.rgb(58, 76, 96), border_width=1,
+     force_overlay=true)
+
+f_perfRow(int r, string key, string value, color valueColor) =>
+    table.cell(performancePanel, 0, r, key, text_color=color.rgb(220,231,243),
+         bgcolor=color.rgb(19,30,45), text_size=dashTextSize, text_halign=text.align_left)
+    table.cell(performancePanel, 1, r, value, text_color=valueColor,
+         bgcolor=color.rgb(19,30,45), text_size=dashTextSize, text_halign=text.align_right)
+
+if barstate.islast
+    table.clear(performancePanel, 0, 0, 1, 13)
+    if showQA
+        bool nativeDashboard = nativeRun
+        int tradeCount = nativeDashboard ? strategy.closedtrades : closed
+        int winCount = nativeDashboard ? strategy.wintrades : wins
+        int lossCount = nativeDashboard ? strategy.losstrades : losses
+        float netUSD = nativeDashboard ? strategy.netprofit : net
+        float grossGain = nativeDashboard ? strategy.grossprofit : shadowGrossProfit
+        float grossLoss = nativeDashboard ? math.abs(strategy.grossloss) : shadowGrossLoss
+        float closedDD = nativeDashboard ? nativeMaxClosedDD : shadowMaxClosedDD
+        float pctWins = tradeCount > 0 ? (100.0 * winCount / tradeCount) : na
+        float profitFactor = grossLoss > 0 ? grossGain / grossLoss : na
+        float avgTradeUSD = tradeCount > 0 ? netUSD / tradeCount : na
+        string winrateTxt = tradeCount > 0 ? str.tostring(pctWins, "#.0") + "%" : "—"
+        string pfTxt = tradeCount == 0 ? "—" : grossLoss <= 0 ? (grossGain > 0 ? "INF" : "—") : str.tostring(profitFactor, "#.##")
+        string avgTxt = tradeCount > 0 ? str.tostring(avgTradeUSD, "#.##") + " USD" : "—"
+        string histTxt = not nativeDashboard and not na(shadowFirstMinute) and not na(shadowLastMinute) ?
+             str.format_time(shadowFirstMinute, "yy-MM-dd", sessionTZ) + " / " + str.format_time(shadowLastMinute, "yy-MM-dd", sessionTZ) : "Loaded history"
+
+        table.cell(performancePanel, 0, 0, "DAE-34  RESULTS",
+             bgcolor=color.rgb(25, 63, 98), text_color=color.white,
+             text_size=dashTextSize, text_halign=text.align_left)
+        table.cell(performancePanel, 1, 0, nativeDashboard ? "1m NATIVE" : "1m SHADOW",
+             bgcolor=nativeDashboard ? color.rgb(20,95,74) : color.rgb(136,75,25),
+             text_color=color.white, text_size=dashTextSize)
+        f_perfRow(1, "WIN RATE", winrateTxt, na(pctWins) ? color.silver : pctWins >= 50 ? color.lime : color.orange)
+        f_perfRow(2, "PROFIT FACTOR", pfTxt, grossLoss == 0 ? color.yellow : grossGain >= grossLoss ? color.lime : color.orange)
+        f_perfRow(3, "NET PROFIT", str.tostring(netUSD, "#.##") + " USD", netUSD >= 0 ? color.lime : color.rgb(255,104,104))
+        f_perfRow(4, "CLOSED TRADES", str.tostring(tradeCount), color.white)
+        f_perfRow(5, "WINS / LOSSES", str.tostring(winCount) + " / " + str.tostring(lossCount), color.white)
+        f_perfRow(6, "GROSS PROFIT", str.tostring(grossGain, "#.##") + " USD", color.lime)
+        f_perfRow(7, "GROSS LOSS", str.tostring(grossLoss, "#.##") + " USD", color.rgb(255,116,116))
+        f_perfRow(8, "AVG / TRADE", avgTxt, na(avgTradeUSD) ? color.silver : avgTradeUSD >= 0 ? color.lime : color.rgb(255,116,116))
+        f_perfRow(9, "MAX CLOSED DD", str.tostring(closedDD, "#.##") + " USD", color.rgb(255,188,84))
+        f_perfRow(10, "SESSION EXITS", str.tostring(nativeDashboard ? nativeSessionExits : shadowSessionClosed), color.rgb(255,190,91))
+        f_perfRow(11, "PERIOD", histTxt, color.silver)
+        f_perfRow(12, "ENTRY / TF", entryLevel + " / " + (nativeDashboard ? "1m" : timeframe.period), color.rgb(124,198,255))
+        f_perfRow(13, "VALIDATION", nativeDashboard ? "TV TESTER" : "UNVERIFIED", nativeDashboard ? color.rgb(157,231,201) : color.rgb(255,190,91))
